@@ -21,6 +21,15 @@ skills/chess-imbalances/scripts/parse_position.sh game.pgn --format text --move 
 # Analyze with Stockfish engine evaluation
 skills/chess-imbalances/scripts/parse_position.sh "<FEN>" --format text --engine --depth 20 --lines 3
 
+# BFIH validator — validate a single phase or all phases
+.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-phase 1 analysis/bfih_phases/phase_1.json
+.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-all analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json
+.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py schema 3
+
+# BFIH formatter — render validated phases to markdown
+.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --output analysis/deep-analysis.md
+.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
+
 # Install dependencies
 source .venv/bin/activate && pip install -r requirements.txt
 ```
@@ -38,6 +47,8 @@ This is a Claude Code skill project. The skill analyzes chess positions through 
 **Two analysis modes** are defined in `SKILL.md`:
 - **Default**: Scan all 10 imbalances, synthesize, recommend plans. Saves full analysis to `analysis/` and prints a concise summary.
 - **Deep** (`--deep`): Full BFIH protocol — competing hypotheses, paradigm inversion, evidence matrix. Protocol defined in `references/bfih_chess_protocol.md`.
+
+**BFIH enforcement pipeline** (`--deep` mode): Three CLI tools support deep analysis. `bfih_models.py` defines Pydantic v2 models for the 9 BFIH phases with built-in validation constraints. `bfih_validator.py` is a CLI tool Claude Code calls after generating each phase's JSON — it validates against models and enforces cross-phase gates (G2, G5, G6, G8). `bfih_formatter.py` renders validated phase JSON to markdown. Claude Code follows SKILL.md's step-by-step deep mode protocol; Python provides validation and formatting, not orchestration.
 
 **`engine_eval.py`** wraps Stockfish via python-chess's UCI protocol. Context-managed `EngineEval` class provides `evaluate_position()`, `evaluate_multipv()`, and `classify_move()`. Auto-discovers Stockfish binary; gracefully returns `None` when unavailable. Called by `board_utils.py` when `--engine` flag is passed, producing the `engine` key in the analysis JSON.
 

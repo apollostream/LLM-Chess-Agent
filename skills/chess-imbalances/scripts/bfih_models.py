@@ -227,6 +227,8 @@ class Synthesis(BaseModel):
     k0_revision: str = Field(min_length=20)
     disconfirming_evidence: list[str] = Field(min_length=1)
     candidate_moves: list[CandidateMove] = Field(min_length=3, max_length=5)
+    position_narrative: str = Field(min_length=40)
+    key_takeaway: str = Field(min_length=20)
 
 
 # ── Phase 9: Discomfort Heuristic ───────────────────────────────────────────

@@ -136,7 +136,7 @@ To see the JSON schema for any phase: `.venv/bin/python skills/chess-imbalances/
 | 5 | ParadigmInversion | `inverted_argument` ≥80 chars, `new_considerations` ≥1 | **G5**: `inverted_assessment` must differ in direction from K0 |
 | 6 | EvidenceMatrix | ≥3 evidence rows, posteriors sum to 1.0±0.01, `reasoning` ≥20 | **G6**: ≥1 posterior moved >0.05 from prior |
 | 7 | ReflexiveReview | `red_team_argument` ≥40 chars | — |
-| 8 | Synthesis | 3-5 candidate moves with rationale ≥10, 1-4 key imbalances, `k0_revision` ≥20 | **G8**: All candidate moves must be legal |
+| 8 | Synthesis | 3-5 candidate moves with rationale ≥10, 1-4 key imbalances, `k0_revision` ≥20, `position_narrative` ≥40 (2nd person coach voice), `key_takeaway` ≥20 (chess lesson to internalize) | **G8**: All candidate moves must be legal |
 | 9 | DiscomfortHeuristic | Auto-warns if `feels_comfortable=true` AND `more_uncertain_than_start=false` | — |
 
 #### Quality Gate: Paradigm Inversion (Phase 5)
@@ -154,18 +154,26 @@ The inversion is **rejected** if `felt_easy_to_dismiss=true` AND `abs(probabilit
   3. For each candidate move, populate `engine_score` and `engine_rank` if the move appears in the engine's top lines (rank 1 = engine's best move).
   4. The `rationale` must explain the **strategic logic** behind the move — not just "engine's top choice" but *why* the move works positionally: what imbalance does it exploit, what plan does it serve, what does it prevent? Bridge the gap between the engine's numerical verdict and human understanding.
   5. When a strategically-motivated move doesn't appear in the engine's top lines, the rationale should acknowledge this and explain what the strategic reasoning sees that the engine may underweight (e.g., long-term pressure, prophylaxis, practical difficulty for the opponent).
+- **Phase 8** (Synthesis) — **Player's Guide fields**: Two additional fields feed the Player's Guide:
+  - `position_narrative` (≥40 chars): Write in **second person** ("You have...", "Your opponent's king is exposed..."). Tell the story of the position — how the imbalances interact, where the tension lies, and what the position demands. This is the coach pointing at the board.
+  - `key_takeaway` (≥20 chars): The chess lesson to internalize from this position. Not position-specific tactics, but the transferable principle (e.g., "A bishop pair advantage only matters in open positions — challenge outposted knights or open lines before they dominate").
 
 ### Step 10: Render Output
 
-After all 9 phases are validated:
+After all 9 phases are validated, generate **two documents**:
 
 ```bash
-# Full markdown render
+# Player's Guide — concise, coach-style narrative for learning
+.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py guide analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json --output analysis/<filename>-guide.md
+
+# Full BFIH Report — complete 9-phase analytical backing
 .venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json --output analysis/<filename>.md
 
 # Console summary
 .venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
 ```
+
+The Player's Guide is the primary output — it's what a player reads to understand the position. The full BFIH report is the supporting evidence.
 
 ### Step 11: Final Validation (Optional)
 

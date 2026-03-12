@@ -167,6 +167,17 @@ def make_synthesis(**overrides):
             {"move": "Nd2", "rationale": "Rerouting knight to better square"},
             {"move": "Re1", "rationale": "Controls the open e-file"},
         ],
+        "position_narrative": (
+            "You have a slight edge thanks to your bishop pair in an open position, "
+            "but Black's knight has found a powerful outpost on d5 that contests your "
+            "advantage. The battle revolves around whether your bishops can find active "
+            "diagonals before that knight becomes a permanent fixture."
+        ),
+        "key_takeaway": (
+            "A bishop pair advantage only matters in open positions — if your opponent "
+            "plants a knight on a secure outpost, you need to challenge it or open "
+            "lines before it dominates."
+        ),
     }
     defaults.update(overrides)
     return Synthesis(**defaults)
@@ -528,6 +539,24 @@ class TestSynthesis:
         s = make_synthesis()
         assert s.candidate_moves[0].engine_score is None
         assert s.candidate_moves[0].engine_rank is None
+
+    def test_position_narrative_required(self):
+        """Synthesis must include a position narrative for the Player's Guide."""
+        s = make_synthesis()
+        assert len(s.position_narrative) >= 40
+
+    def test_position_narrative_too_short(self):
+        with pytest.raises(ValidationError, match="position_narrative"):
+            make_synthesis(position_narrative="Too short.")
+
+    def test_key_takeaway_required(self):
+        """Synthesis must include a key takeaway for the Player's Guide."""
+        s = make_synthesis()
+        assert len(s.key_takeaway) >= 20
+
+    def test_key_takeaway_too_short(self):
+        with pytest.raises(ValidationError, match="key_takeaway"):
+            make_synthesis(key_takeaway="Short.")
 
     def test_too_few_moves(self):
         with pytest.raises(ValidationError, match="candidate_moves"):

@@ -18,7 +18,8 @@ from bfih_formatter import (
     render_ancestral_check, render_paradigm_inversion,
     render_evidence_matrix, render_reflexive_review,
     render_synthesis, render_discomfort_heuristic,
-    render_full, render_summary, generate_board_svg,
+    render_full, render_summary, render_players_guide,
+    generate_board_svg,
 )
 from test_bfih_models import (
     make_k0, make_hypothesis_set, make_ontological_scan,
@@ -223,3 +224,116 @@ class TestSummary:
         assert len(summary) < 2000
         # Should mention assessment
         assert "white" in summary.lower() or "slight" in summary.lower() or "assessment" in summary.lower()
+
+
+# ── TestPlayersGuide ────────────────────────────────────────────────────────
+
+class TestPlayersGuide:
+    def test_guide_has_all_sections(self, tmp_path):
+        """Player's Guide must have: What You Should See, Story, Plan, Takeaway."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        assert "What You Should See" in guide
+        assert "Story" in guide or "Position" in guide
+        assert "Your Plan" in guide or "Plan" in guide
+        assert "Key Takeaway" in guide or "Takeaway" in guide
+
+    def test_guide_has_assessment_header(self, tmp_path):
+        """Guide should lead with the assessment."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        assert "White Slight" in guide or "white" in guide.lower()
+
+    def test_guide_is_concise(self, tmp_path):
+        """Guide should be much shorter than full report."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        full = render_full(phases_dir)
+        assert len(guide) < len(full) * 0.5
+
+    def test_guide_shows_candidate_moves(self, tmp_path):
+        """Plan section must include candidate moves with rationale."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        assert "Bf4" in guide
+        # Rationale should be present, not just the move name
+        assert "bishop" in guide.lower() or "activates" in guide.lower()
+
+    def test_guide_shows_high_relevance_findings(self, tmp_path):
+        """What You Should See should draw from high-relevance ontological findings."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        # Our test fixtures use "moderate" relevance for all — so it should
+        # still include some findings (fall back to top findings)
+        assert "Imbalance" in guide or "finding" in guide.lower() or "Superior" in guide
+
+    def test_guide_includes_narrative(self, tmp_path):
+        """Guide should include the position narrative from synthesis."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        assert "bishop pair" in guide.lower() or "outpost" in guide.lower()
+
+    def test_guide_includes_takeaway(self, tmp_path):
+        """Guide should include the key takeaway from synthesis."""
+        phases_dir = populate_phases_dir(tmp_path)
+        guide = render_players_guide(phases_dir)
+        assert "takeaway" in guide.lower() or "lesson" in guide.lower()
+
+    def test_guide_with_position_data(self, tmp_path):
+        """Guide should include FEN and board when position data provided."""
+        phases_dir = populate_phases_dir(tmp_path)
+        position_data = {
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        }
+        guide = render_players_guide(phases_dir, position_data=position_data)
+        assert "FEN" in guide
+
+    def test_guide_with_engine_data(self, tmp_path):
+        """When engine data is available, guide should mention engine confirmation."""
+        phases_dir = populate_phases_dir(tmp_path)
+        position_data = {
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            "engine": {
+                "available": True,
+                "eval": {
+                    "score_display": "+0.32",
+                    "centipawns": 32,
+                    "mate_in": None,
+                    "best_move": "e5",
+                    "pv": ["e5", "Nf3", "Nc6"],
+                    "wdl": {"win": 250, "draw": 600, "loss": 150},
+                },
+                "depth": 20,
+            },
+        }
+        guide = render_players_guide(phases_dir, position_data=position_data)
+        assert "+0.32" in guide or "engine" in guide.lower()
+
+    def test_guide_with_board_svg(self, tmp_path):
+        """Guide should generate SVG board diagram when output path given."""
+        phases_dir = populate_phases_dir(tmp_path)
+        output_path = tmp_path / "guide.md"
+        position_data = {
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        }
+        guide = render_players_guide(
+            phases_dir, position_data=position_data, output_path=output_path,
+        )
+        svg_path = tmp_path / "guide_board.svg"
+        assert svg_path.exists()
+        assert "![Board Position]" in guide
+
+    def test_guide_discomfort_warning(self, tmp_path):
+        """If discomfort heuristic has a warning, guide should surface it."""
+        phases_dir = populate_phases_dir(tmp_path)
+        # Overwrite phase 9 with a warning
+        from bfih_models import DiscomfortHeuristic
+        dh = DiscomfortHeuristic(
+            feels_comfortable=True,
+            confidence_drop_moment="None noticed",
+            more_uncertain_than_start=False,
+            warning=None,  # auto-populated by validator
+        )
+        (phases_dir / "phase_9.json").write_text(dh.model_dump_json(indent=2))
+        guide = render_players_guide(phases_dir)
+        assert "warning" in guide.lower() or "caution" in guide.lower() or "⚠" in guide

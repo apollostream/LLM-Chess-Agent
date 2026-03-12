@@ -311,6 +311,115 @@ def render_full(phases_dir: Path, position_data: dict | None = None,
     return "\n\n---\n\n".join(sections) + "\n"
 
 
+def render_players_guide(phases_dir: Path, position_data: dict | None = None,
+                         output_path: Path | None = None) -> str:
+    """Render a standalone Player's Guide — coach-style narrative.
+
+    Draws from phases 1 (K0), 3 (Ontological Scan), 8 (Synthesis), and
+    9 (Discomfort Heuristic) to produce a concise, actionable document.
+    """
+    phases_dir = Path(phases_dir)
+    sections = []
+
+    # ── Header ──────────────────────────────────────────────────────────
+    try:
+        synthesis = _load_phase(phases_dir, 8)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return "Player's Guide unavailable: synthesis phase not found."
+
+    assessment = _assessment_display(synthesis.assessment.value)
+    confidence = synthesis.confidence.value
+
+    header = f"# Player's Guide — {assessment}"
+    header += f"\n\n**Confidence:** {confidence}"
+
+    if position_data and "fen" in position_data:
+        header += f"\n\n**FEN:** `{position_data['fen']}`"
+        if output_path:
+            output_path = Path(output_path)
+            svg_name = output_path.stem + "_board.svg"
+            svg_path = output_path.parent / svg_name
+            generate_board_svg(position_data["fen"], svg_path)
+            header += f"\n\n![Board Position]({svg_name})"
+
+    sections.append(header)
+
+    # ── Engine confirmation (brief) ─────────────────────────────────────
+    if position_data:
+        eng = position_data.get("engine", {})
+        if eng.get("available") and eng.get("eval"):
+            ev = eng["eval"]
+            engine_line = f"*Engine confirms: {ev['score_display']}"
+            if ev.get("best_move"):
+                engine_line += f", best move {ev['best_move']}"
+            if eng.get("depth"):
+                engine_line += f" (depth {eng['depth']})"
+            engine_line += "*"
+            sections.append(engine_line)
+
+    # ── What You Should See ─────────────────────────────────────────────
+    see_lines = ["## What You Should See", ""]
+    try:
+        scan = _load_phase(phases_dir, 3)
+        # Prefer high-relevance findings; fall back to all if none are high
+        high = [f for f in scan.findings if f.relevance.value == "high"]
+        findings = high if high else sorted(
+            scan.findings, key=lambda x: x.number,
+        )[:4]
+        for f in sorted(findings, key=lambda x: x.number):
+            see_lines.append(
+                f"- **{f.name}** [{f.direction.value}] — {f.finding}"
+            )
+    except (FileNotFoundError, json.JSONDecodeError):
+        see_lines.append("- *(Ontological scan unavailable)*")
+
+    sections.append("\n".join(see_lines))
+
+    # ── The Story of This Position ──────────────────────────────────────
+    story_lines = ["## The Story of This Position", ""]
+
+    try:
+        k0 = _load_phase(phases_dir, 1)
+        story_lines.append(f"*{k0.opening_context}*")
+        story_lines.append("")
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    story_lines.append(synthesis.position_narrative)
+    sections.append("\n".join(story_lines))
+
+    # ── Your Plan ───────────────────────────────────────────────────────
+    plan_lines = ["## Your Plan", ""]
+    for cm in synthesis.candidate_moves:
+        score_part = ""
+        if cm.engine_score is not None:
+            score_part = f" `[{cm.engine_score}]`"
+            if cm.engine_rank is not None:
+                score_part = f" `[{cm.engine_score}, #{cm.engine_rank}]`"
+        plan_lines.append(f"- **{cm.move}**{score_part} — {cm.rationale}")
+    sections.append("\n".join(plan_lines))
+
+    # ── Key Takeaway ────────────────────────────────────────────────────
+    takeaway_lines = [
+        "## Key Takeaway",
+        "",
+        synthesis.key_takeaway,
+    ]
+
+    # Surface discomfort warning if present
+    try:
+        dh = _load_phase(phases_dir, 9)
+        if dh.warning:
+            takeaway_lines.append("")
+            takeaway_lines.append(f"⚠ *{dh.warning}*")
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    sections.append("\n".join(takeaway_lines))
+
+    return "\n\n---\n\n".join(sections) + "\n"
+
+
 def render_summary(phases_dir: Path) -> str:
     """Render a concise summary from the synthesis phase."""
     phases_dir = Path(phases_dir)
@@ -357,13 +466,34 @@ def main():
     rp.add_argument("--position-data", help="Path to position data JSON")
     rp.add_argument("--output", help="Output file path (default: stdout)")
 
+    # guide
+    gp = subparsers.add_parser("guide", help="Player's Guide (coach-style)")
+    gp.add_argument("dir", help="Directory containing phase_N.json files")
+    gp.add_argument("--position-data", help="Path to position data JSON")
+    gp.add_argument("--output", help="Output file path (default: stdout)")
+
     # summary
     sp = subparsers.add_parser("summary", help="Concise summary")
     sp.add_argument("dir", help="Directory containing phase_N.json files")
 
     args = parser.parse_args()
 
-    if args.command == "render":
+    if args.command == "guide":
+        position_data = None
+        if args.position_data:
+            position_data = json.loads(Path(args.position_data).read_text())
+
+        output_path = Path(args.output) if args.output else None
+        md = render_players_guide(Path(args.dir), position_data=position_data,
+                                  output_path=output_path)
+
+        if output_path:
+            Path(output_path).write_text(md)
+            print(f"Written to {args.output}")
+        else:
+            print(md)
+
+    elif args.command == "render":
         position_data = None
         if args.position_data:
             position_data = json.loads(Path(args.position_data).read_text())

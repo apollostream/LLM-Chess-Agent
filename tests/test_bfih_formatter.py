@@ -104,6 +104,19 @@ class TestPhaseRendering:
         assert "white_slight" in md or "White slight" in md.lower() or "slight" in md.lower()
         assert "Bf4" in md or "candidate" in md.lower()
 
+    def test_render_synthesis_with_engine_scores(self):
+        s = make_synthesis(candidate_moves=[
+            {"move": "Bf4", "rationale": "Activates bishop toward e5",
+             "engine_score": "+0.45", "engine_rank": 1},
+            {"move": "Nd2", "rationale": "Rerouting knight to better square",
+             "engine_score": "+0.22", "engine_rank": 3},
+            {"move": "Re1", "rationale": "Controls the open e-file",
+             "engine_score": "+0.35", "engine_rank": 2},
+        ])
+        md = render_synthesis(s)
+        assert "+0.45" in md
+        assert "Bf4" in md
+
     def test_render_discomfort_heuristic(self):
         md = render_discomfort_heuristic(make_discomfort_heuristic())
         assert "discomfort" in md.lower() or "comfortable" in md.lower()
@@ -129,6 +142,33 @@ class TestFullRender:
         }
         md = render_full(phases_dir, position_data=position_data)
         assert "rnbqkbnr" in md or "FEN" in md
+
+    def test_full_render_with_engine_data(self, tmp_path):
+        phases_dir = populate_phases_dir(tmp_path)
+        position_data = {
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            "engine": {
+                "available": True,
+                "eval": {
+                    "score_display": "+0.32",
+                    "centipawns": 32,
+                    "mate_in": None,
+                    "best_move": "e5",
+                    "pv": ["e5", "Nf3", "Nc6"],
+                    "wdl": {"win": 250, "draw": 600, "loss": 150},
+                },
+                "top_lines": [
+                    {"score_display": "+0.32", "pv": ["e5", "Nf3", "Nc6"]},
+                    {"score_display": "+0.25", "pv": ["d5", "exd5", "Qxd5"]},
+                    {"score_display": "+0.18", "pv": ["c5", "Nf3", "d6"]},
+                ],
+                "depth": 20,
+            },
+        }
+        md = render_full(phases_dir, position_data=position_data)
+        assert "Engine" in md
+        assert "+0.32" in md
+        assert "e5" in md
 
     def test_full_render_generates_board_svg(self, tmp_path):
         phases_dir = populate_phases_dir(tmp_path)

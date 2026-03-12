@@ -211,9 +211,11 @@ class ReflexiveReview(BaseModel):
 # ── Phase 8: Synthesis ──────────────────────────────────────────────────────
 
 class CandidateMove(BaseModel):
-    """A candidate move with strategic rationale."""
+    """A candidate move with strategic rationale and optional engine score."""
     move: str
     rationale: str = Field(min_length=10)
+    engine_score: Optional[str] = None
+    engine_rank: Optional[int] = None
 
 
 class Synthesis(BaseModel):

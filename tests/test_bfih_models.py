@@ -511,6 +511,24 @@ class TestSynthesis:
         assert s.assessment == Assessment.white_slight
         assert len(s.candidate_moves) == 3
 
+    def test_candidate_move_with_engine_score(self):
+        s = make_synthesis(candidate_moves=[
+            {"move": "Bf4", "rationale": "Activates bishop and eyes the e5 outpost",
+             "engine_score": "+0.45", "engine_rank": 1},
+            {"move": "Nd2", "rationale": "Rerouting knight to better square",
+             "engine_score": "+0.22", "engine_rank": 3},
+            {"move": "Re1", "rationale": "Controls the open e-file",
+             "engine_score": "+0.35", "engine_rank": 2},
+        ])
+        assert s.candidate_moves[0].engine_score == "+0.45"
+        assert s.candidate_moves[0].engine_rank == 1
+
+    def test_candidate_move_without_engine_score(self):
+        """Engine fields are optional — analysis works without engine."""
+        s = make_synthesis()
+        assert s.candidate_moves[0].engine_score is None
+        assert s.candidate_moves[0].engine_rank is None
+
     def test_too_few_moves(self):
         with pytest.raises(ValidationError, match="candidate_moves"):
             make_synthesis(candidate_moves=[

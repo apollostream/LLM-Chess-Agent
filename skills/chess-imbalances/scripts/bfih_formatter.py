@@ -190,7 +190,12 @@ def render_synthesis(s: Synthesis) -> str:
     lines.append("#### Candidate Moves")
     lines.append("")
     for cm in s.candidate_moves:
-        lines.append(f"- **{cm.move}:** {cm.rationale}")
+        score_part = ""
+        if cm.engine_score is not None:
+            score_part = f" `[{cm.engine_score}]`"
+            if cm.engine_rank is not None:
+                score_part = f" `[{cm.engine_score}, #{cm.engine_rank}]`"
+        lines.append(f"- **{cm.move}:**{score_part} {cm.rationale}")
     return "\n".join(lines)
 
 
@@ -204,6 +209,43 @@ def render_discomfort_heuristic(dh: DiscomfortHeuristic) -> str:
     ]
     if dh.warning:
         lines.append(f"- **⚠ Warning:** {dh.warning}")
+    return "\n".join(lines)
+
+
+# ── Engine eval section ──────────────────────────────────────────────────────
+
+def render_engine_eval(position_data: dict) -> str | None:
+    """Render engine evaluation summary from position data. Returns None if unavailable."""
+    eng = position_data.get("engine", {})
+    if not eng.get("available") or not eng.get("eval"):
+        return None
+
+    ev = eng["eval"]
+    lines = [
+        "### Engine Evaluation",
+        "",
+        f"- **Score:** {ev['score_display']}",
+    ]
+    if ev.get("mate_in") is not None:
+        lines[-1] += f" (mate in {abs(ev['mate_in'])})"
+    if ev.get("wdl"):
+        w, d, l = ev["wdl"]["win"], ev["wdl"]["draw"], ev["wdl"]["loss"]
+        lines.append(f"- **WDL:** {w/10:.1f}% / {d/10:.1f}% / {l/10:.1f}%")
+    lines.append(f"- **Best move:** {ev.get('best_move', '?')}")
+    if ev.get("pv"):
+        lines.append(f"- **PV:** {' '.join(ev['pv'][:8])}")
+
+    top = eng.get("top_lines")
+    if top and len(top) > 1:
+        lines.append(f"- **Top {len(top)} lines:**")
+        for i, line in enumerate(top, 1):
+            pv_str = " ".join(line.get("pv", [])[:6])
+            lines.append(f"  {i}. ({line['score_display']}) {pv_str}")
+
+    depth = eng.get("depth")
+    if depth:
+        lines.append(f"- **Depth:** {depth}")
+
     return "\n".join(lines)
 
 
@@ -244,6 +286,12 @@ def render_full(phases_dir: Path, position_data: dict | None = None,
             generate_board_svg(position_data["fen"], svg_path)
             header += f"\n\n![Board Position]({svg_name})"
     sections.append(header)
+
+    # Engine evaluation (if available)
+    if position_data:
+        engine_section = render_engine_eval(position_data)
+        if engine_section:
+            sections.append(engine_section)
 
     # Render each phase
     renderers = [

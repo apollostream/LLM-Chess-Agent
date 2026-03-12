@@ -102,8 +102,10 @@ When the user appends `--deep` or asks for deep analysis, follow this enforced p
 Run `parse_position.sh` and save the output:
 
 ```bash
-skills/chess-imbalances/scripts/parse_position.sh "<FEN_OR_INPUT>" --format json > analysis/bfih_phases/position_data.json
+skills/chess-imbalances/scripts/parse_position.sh "<FEN_OR_INPUT>" --format json --engine --depth 20 --lines 3 > analysis/bfih_phases/position_data.json
 ```
+
+If Stockfish is unavailable the `--engine` flag is silently ignored and the `engine` key will be absent from the output. The analysis proceeds without engine data.
 
 Create the `analysis/bfih_phases/` directory if it doesn't exist.
 
@@ -144,8 +146,14 @@ The inversion is **rejected** if `felt_easy_to_dismiss=true` AND `abs(probabilit
 #### Pre-Population Notes
 
 - **Phase 3** (Ontological Scan): Use raw findings from `position_data.json` — the 10 imbalance categories map to JSON sections per the default mode table.
-- **Phase 6** (Evidence Matrix): Use hypothesis IDs from Phase 2; map ontological findings to hypotheses using likelihood ratings (++, +, 0, -, --).
-- **Phase 8** (Synthesis): Candidate moves must be from `position_data.json["legal_moves"]`.
+- **Phase 5** (Paradigm Inversion): If engine data is available in `position_data.json["engine"]`, use the engine evaluation to stress-test or support the inverted argument. If the engine disagrees with K0, that's evidence the inversion has teeth. If the engine agrees with K0, the inversion must argue why strategic factors the engine underweights (long-term pawn structure, piece coordination, prophylaxis) could matter more.
+- **Phase 6** (Evidence Matrix): Use hypothesis IDs from Phase 2; map ontological findings to hypotheses using likelihood ratings (++, +, 0, -, --). If engine data is available, include at least one evidence row referencing the engine's evaluation (e.g., "Engine scores position +0.32 for White") and rate it against each hypothesis.
+- **Phase 8** (Synthesis): Candidate moves must be from `position_data.json["legal_moves"]`. **Engine cross-reference is required when engine data is available:**
+  1. Read `position_data.json["engine"]["top_lines"]` and `engine.eval.best_move`.
+  2. Your 3-5 candidate moves should include at least one engine top choice and at least one strategically-motivated move that may not be in the engine's top lines.
+  3. For each candidate move, populate `engine_score` and `engine_rank` if the move appears in the engine's top lines (rank 1 = engine's best move).
+  4. The `rationale` must explain the **strategic logic** behind the move — not just "engine's top choice" but *why* the move works positionally: what imbalance does it exploit, what plan does it serve, what does it prevent? Bridge the gap between the engine's numerical verdict and human understanding.
+  5. When a strategically-motivated move doesn't appear in the engine's top lines, the rationale should acknowledge this and explain what the strategic reasoning sees that the engine may underweight (e.g., long-term pressure, prophylaxis, practical difficulty for the opponent).
 
 ### Step 10: Render Output
 

@@ -18,7 +18,7 @@ from bfih_formatter import (
     render_ancestral_check, render_paradigm_inversion,
     render_evidence_matrix, render_reflexive_review,
     render_synthesis, render_discomfort_heuristic,
-    render_full, render_summary,
+    render_full, render_summary, generate_board_svg,
 )
 from test_bfih_models import (
     make_k0, make_hypothesis_set, make_ontological_scan,
@@ -60,6 +60,9 @@ class TestPhaseRendering:
         assert "H1" in md
         assert "H_catch" in md
         assert "0.45" in md or "45" in md
+        # Description and plan should be bullet-prefixed, not indented
+        assert "\n- " in md
+        assert "- *Plan:*" in md
 
     def test_render_ontological_scan(self):
         md = render_ontological_scan(make_ontological_scan())
@@ -67,6 +70,9 @@ class TestPhaseRendering:
         # Should cover all 10
         for i in range(1, 11):
             assert str(i) in md
+        # Finding and interaction should be bullet-prefixed
+        assert "\n- " in md
+        assert "- *Interaction:*" in md
 
     def test_render_ancestral_check(self):
         md = render_ancestral_check(make_ancestral_check())
@@ -85,6 +91,8 @@ class TestPhaseRendering:
         assert "|" in md  # Table structure
         # Should show prior→posterior
         assert "0.45" in md or "0.40" in md
+        # Hypothesis columns should be center-aligned
+        assert ":---:" in md
 
     def test_render_reflexive_review(self):
         md = render_reflexive_review(make_reflexive_review())
@@ -121,6 +129,48 @@ class TestFullRender:
         }
         md = render_full(phases_dir, position_data=position_data)
         assert "rnbqkbnr" in md or "FEN" in md
+
+    def test_full_render_generates_board_svg(self, tmp_path):
+        phases_dir = populate_phases_dir(tmp_path)
+        output_path = tmp_path / "analysis.md"
+        position_data = {
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        }
+        md = render_full(phases_dir, position_data=position_data,
+                         output_path=output_path)
+        # SVG file should be generated alongside output
+        svg_path = tmp_path / "analysis_board.svg"
+        assert svg_path.exists()
+        svg_content = svg_path.read_text()
+        assert "<svg" in svg_content
+        # Markdown should reference the SVG
+        assert "![Board Position](analysis_board.svg)" in md
+
+
+# ── TestBoardDiagram ─────────────────────────────────────────────────────────
+
+class TestBoardDiagram:
+    def test_generate_board_svg(self, tmp_path):
+        svg_path = tmp_path / "board.svg"
+        result = generate_board_svg(
+            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            svg_path,
+        )
+        assert result == svg_path
+        assert svg_path.exists()
+        content = svg_path.read_text()
+        assert "<svg" in content
+        assert "viewBox" in content
+
+    def test_svg_file_size_reasonable(self, tmp_path):
+        svg_path = tmp_path / "board.svg"
+        generate_board_svg(
+            "4r1k1/1p1b1pp1/pp1pr2p/8/3p1q2/1P1B1Q1P/P1P2PK1/R5R1 b - - 0 23",
+            svg_path,
+        )
+        size = svg_path.stat().st_size
+        # SVG should be between 5KB and 100KB
+        assert 5_000 < size < 100_000
 
 
 # ── TestSummary ──────────────────────────────────────────────────────────────

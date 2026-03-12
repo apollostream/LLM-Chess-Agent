@@ -14,6 +14,9 @@ import json
 import sys
 from pathlib import Path
 
+import chess
+import chess.svg
+
 from bfih_models import (
     K0, HypothesisSet, OntologicalScan, AncestralCheck,
     ParadigmInversion, EvidenceMatrix, ReflexiveReview,
@@ -64,8 +67,9 @@ def render_hypotheses(hs: HypothesisSet) -> str:
             f"**{h.id}** (prior: {h.prior:.2f}) — "
             f"{_assessment_display(h.assessment.value)}"
         )
-        lines.append(f"  {h.description}")
-        lines.append(f"  *Plan:* {h.plan}")
+        lines.append("")
+        lines.append(f"- {h.description}")
+        lines.append(f"- *Plan:* {h.plan}")
         lines.append("")
     return "\n".join(lines)
 
@@ -77,9 +81,10 @@ def render_ontological_scan(scan: OntologicalScan) -> str:
             f"**{f.number}. {f.name}** "
             f"[{f.relevance.value}] [{f.direction.value}]"
         )
-        lines.append(f"  {f.finding}")
+        lines.append("")
+        lines.append(f"- {f.finding}")
         if f.interaction:
-            lines.append(f"  *Interaction:* {f.interaction}")
+            lines.append(f"- *Interaction:* {f.interaction}")
         lines.append("")
     return "\n".join(lines)
 
@@ -128,7 +133,9 @@ def render_evidence_matrix(em: EvidenceMatrix) -> str:
         header_cells.append(f"{h_id} ({p:.2f}→{post:.2f})")
 
     lines.append("| " + " | ".join(header_cells) + " |")
-    lines.append("| " + " | ".join("---" for _ in header_cells) + " |")
+    # Left-align Finding column, center-align hypothesis columns (compact)
+    data_seps = "|".join(":---:" for _ in header_cells[1:])
+    lines.append(f"| --- |{data_seps}|")
 
     for row in em.rows:
         cells = [row.finding]
@@ -200,17 +207,42 @@ def render_discomfort_heuristic(dh: DiscomfortHeuristic) -> str:
     return "\n".join(lines)
 
 
+# ── Board diagram ───────────────────────────────────────────────────────────
+
+def generate_board_svg(fen: str, output_path: Path) -> Path:
+    """Generate an SVG board diagram from a FEN string.
+
+    Returns the path to the generated SVG file.
+    """
+    board = chess.Board(fen)
+    svg_content = chess.svg.board(board, size=400)
+    output_path = Path(output_path)
+    output_path.write_text(svg_content)
+    return output_path
+
+
 # ── Full render ──────────────────────────────────────────────────────────────
 
-def render_full(phases_dir: Path, position_data: dict | None = None) -> str:
-    """Render all 9 phases to a complete markdown document."""
+def render_full(phases_dir: Path, position_data: dict | None = None,
+                output_path: Path | None = None) -> str:
+    """Render all 9 phases to a complete markdown document.
+
+    If output_path is provided and position_data contains a FEN, generates
+    an SVG board diagram alongside the output file.
+    """
     phases_dir = Path(phases_dir)
     sections = []
 
-    # Header
+    # Header with optional board diagram
     header = "## Deep Analysis — BFIH Protocol"
     if position_data and "fen" in position_data:
         header += f"\n\n**FEN:** `{position_data['fen']}`"
+        if output_path:
+            output_path = Path(output_path)
+            svg_name = output_path.stem + "_board.svg"
+            svg_path = output_path.parent / svg_name
+            generate_board_svg(position_data["fen"], svg_path)
+            header += f"\n\n![Board Position]({svg_name})"
     sections.append(header)
 
     # Render each phase
@@ -288,10 +320,12 @@ def main():
         if args.position_data:
             position_data = json.loads(Path(args.position_data).read_text())
 
-        md = render_full(Path(args.dir), position_data=position_data)
+        output_path = Path(args.output) if args.output else None
+        md = render_full(Path(args.dir), position_data=position_data,
+                         output_path=output_path)
 
-        if args.output:
-            Path(args.output).write_text(md)
+        if output_path:
+            output_path.write_text(md)
             print(f"Written to {args.output}")
         else:
             print(md)

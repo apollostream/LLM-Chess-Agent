@@ -5,16 +5,22 @@ description: >
   Triggers on: FEN strings, PGN content, chess position analysis requests,
   "assess imbalances", "evaluate position", "what should White/Black do",
   "analyze this position". Append --deep for full BFIH treatment.
+  Append --no-save to skip file output.
 ---
 
 # Chess Imbalances Analysis Skill
 
 Analyze any chess position through Jeremy Silman's 10-imbalance framework from *Reassess Your Chess*. Produces structured strategic assessments that identify who stands better, why, and what plans follow.
 
-## Two Modes
+## Modes and Flags
 
 - **Default mode:** Systematic imbalance catalog + strategic narrative. Fast, practical, covers all 10 categories.
 - **Deep mode** (triggered by `--deep`): Full BFIH protocol — competing hypotheses, paradigm inversion, evidence matrix, reflexive review. For positions with genuine strategic tension where the "obvious" assessment might be wrong.
+- **`--no-save`**: Skip file output; print the full analysis to the console only.
+- **`--save`** (default): Write the full analysis to a markdown file and print a concise summary to the console.
+- **`--engine`**: Enable Stockfish engine evaluation (requires Stockfish installed). Adds eval, best move, PV, WDL%, and top N lines.
+- **`--depth N`**: Engine search depth (default: 20). Higher = stronger but slower.
+- **`--lines N`**: Number of multi-PV lines to display (default: 3).
 
 ## Input Handling
 
@@ -28,6 +34,18 @@ Accept any of these formats — auto-detect:
 | Verbal | "Ruy Lopez after 6...d6" | Set up the position from known opening theory |
 
 For verbal descriptions, set up the position using known opening theory, then generate the FEN before analysis.
+
+### Move targeting (`--move`)
+
+For PGN files and move lists, you can analyze a specific move instead of the final position:
+
+```bash
+parse_position.sh game.pgn --move 15        # Position after White's 15th move
+parse_position.sh game.pgn --move 15b       # Position after Black's 15th move
+parse_position.sh "1. e4 e5 2. Nf3" --move 1   # Position after 1. e4
+```
+
+Ignored for FEN input (FEN already specifies a position).
 
 ## Default Mode Workflow
 
@@ -56,9 +74,9 @@ Check every category systematically. Reference `references/imbalances_guide.md` 
 | 5 | Control of Key File | `files.*`, `piece_activity.*rooks_on_*` | Whether file control leads to penetration |
 | 6 | Hole / Weak Square | `piece_activity.*knight_outposts` | Color complex analysis, potential outpost identification |
 | 7 | Lead in Development | `development.*`, `king_safety.*can_castle*` | Whether the lead matters given position type |
-| 8 | Initiative | `is_check`, `legal_moves`, activity metrics | Threat assessment, forcing move identification |
-| 9 | King Safety | `king_safety.*` | Attack potential assessment, pawn storm possibilities |
-| 10 | Statics vs Dynamics | `game_phase`, all fields | Meta-assessment: which imbalances matter NOW |
+| 8 | Initiative | `is_check`, `legal_moves`, activity metrics, `tactics.threats.*`, `tactics.sequences.*` | Threat assessment, forcing move identification, concrete tactical resources |
+| 9 | King Safety | `king_safety.*`, `tactics.static.weak_back_rank`, `tactics.threats.back_rank_mates` | Attack potential assessment, pawn storm possibilities, back rank vulnerability |
+| 10 | Statics vs Dynamics | `game_phase`, all fields, `tactics.static.*` vs `tactics.threats.*` | Meta-assessment: which imbalances matter NOW, static features vs concrete threats |
 
 ### Step 3: Identify Who Benefits
 
@@ -128,6 +146,30 @@ Extends default mode with the full BFIH protocol output. See `references/bfih_ch
 - Reflexive review with red team argument
 - Synthesis with confidence levels and disconfirming evidence acknowledged
 
+## Output Behavior (Save / No-Save)
+
+By default (`--save`, or no flag), every analysis is **saved to a file and summarized to the console**.
+
+### Save mode (default)
+
+1. Perform the full analysis (default or deep mode).
+2. Write the complete markdown output to `analysis/<YYYY-MM-DD>_<short-description>.md` in the project root.
+   - `<short-description>`: 2-4 lowercase words derived from the position (opening name, key feature, or player names). Use hyphens, no spaces. Examples: `sicilian-dragon-classical`, `carlsbad-endgame`, `queens-gambit-declined`.
+   - If a file with the same name already exists, append a numeric suffix: `_2`, `_3`, etc.
+3. Print a **concise console summary** (not the full analysis). The summary format:
+
+```
+Saved to: analysis/<filename>.md
+
+**[White/Black/Equal] — [slight/clear/decisive advantage]**
+Key: [1-2 sentence synthesis naming the dominant imbalances]
+Plan: [Target sector] — [top 1-2 candidate moves with one-line rationale]
+```
+
+### No-save mode (`--no-save`)
+
+Print the full analysis to the console (the standard output format templates below). Do not write any file.
+
 ## Resource Pointers
 
 | Resource | When to Read |
@@ -146,4 +188,5 @@ Extends default mode with the full BFIH protocol output. See `references/bfih_ch
 - The script's analysis is a starting point, not an endpoint. Claude's chess knowledge should supplement and contextualize the raw data.
 - Not all 10 imbalances will be relevant in every position. Focus on the 2-4 that define the position's character.
 - When imbalances conflict (e.g., material advantage vs king safety deficit), the synthesis must address the tension explicitly.
-- This skill produces strategic assessments, not engine-style evaluations. The goal is understanding, not a centipawn score.
+- This skill produces strategic assessments, not engine-style evaluations. The goal is understanding, not a centipawn score. When `--engine` is used, the engine eval supplements the strategic assessment — use it to validate tactical claims and quantify advantages, not as a substitute for understanding.
+- Engine integration requires Stockfish to be installed on the system. All engine functions degrade gracefully when Stockfish is unavailable.

@@ -8,6 +8,8 @@ feeds Silman's imbalance framework.
 Usage:
     python board_utils.py <FEN | PGN_FILE | MOVES>
     python board_utils.py --format text <FEN | PGN_FILE | MOVES>
+    python board_utils.py --move 15 game.pgn          # after White's 15th
+    python board_utils.py --move 15b game.pgn         # after Black's 15th
 """
 
 import argparse
@@ -18,6 +20,9 @@ from pathlib import Path
 
 import chess
 import chess.pgn
+
+from tactical_motifs import analyze_tactics
+from engine_eval import EngineEval
 
 
 # ── Piece values ──────────────────────────────────────────────────────────────
@@ -71,16 +76,61 @@ EXTENDED_CENTER = CENTER_SQUARES + [
 
 # ── Input parsing ─────────────────────────────────────────────────────────────
 
-def detect_input(raw: str) -> tuple[str, chess.Board]:
-    """Auto-detect input type and return (input_type, board)."""
+def parse_move_target(move_str: str) -> tuple[int, bool]:
+    """Parse a --move value like '15' (after White's 15th) or '15b' (after Black's 15th).
+
+    Returns (fullmove_number, after_black).
+    """
+    move_str = move_str.strip().lower()
+    if move_str.endswith("b"):
+        return int(move_str[:-1]), True
+    elif move_str.endswith("w"):
+        return int(move_str[:-1]), False
+    else:
+        # Plain number means after White's move
+        return int(move_str), False
+
+
+def advance_to_move(node, move_target: str) -> chess.Board:
+    """Walk a game tree to the position after the specified move number.
+
+    move_target: e.g. '15' (after White's 15th), '15b' (after Black's 15th).
+    """
+    target_move, after_black = parse_move_target(move_target)
+
+    current = node
+    while current.variations:
+        current = current.variations[0]
+        board = current.board()
+        move_num = board.fullmove_number
+        # After White's move: it's now Black's turn, fullmove_number == target
+        if not after_black and board.turn == chess.BLACK and move_num == target_move:
+            return board
+        # After Black's move: it's now White's turn, fullmove_number == target + 1
+        if after_black and board.turn == chess.WHITE and move_num == target_move + 1:
+            return board
+
+    raise ValueError(
+        f"Move {move_target} not found in game "
+        f"(game ends at move {current.board().fullmove_number})"
+    )
+
+
+def detect_input(raw: str, move: str | None = None) -> tuple[str, chess.Board]:
+    """Auto-detect input type and return (input_type, board).
+
+    If move is specified, navigate to that move number (PGN and move-list only).
+    """
     raw = raw.strip()
 
     # PGN file path
     if os.path.isfile(raw) and raw.endswith(".pgn"):
-        return parse_pgn_file(raw)
+        return parse_pgn_file(raw, move)
 
     # FEN string (has at least 6 space-separated parts, or contains '/')
     if "/" in raw:
+        if move:
+            print("Warning: --move is ignored for FEN input", file=sys.stderr)
         try:
             board = chess.Board(raw)
             return "fen", board
@@ -97,6 +147,22 @@ def detect_input(raw: str) -> tuple[str, chess.Board]:
             if not token or token[0].isdigit():
                 continue
             board.push_san(token)
+
+        if move:
+            # Replay from scratch with move target
+            game = chess.pgn.Game()
+            replay_board = chess.Board()
+            node = game
+            tokens = raw.replace(".", " ").split()
+            for token in tokens:
+                token = token.strip()
+                if not token or token[0].isdigit():
+                    continue
+                m = replay_board.parse_san(token)
+                node = node.add_variation(m)
+                replay_board.push(m)
+            board = advance_to_move(game, move)
+
         return "moves", board
     except (ValueError, chess.IllegalMoveError, chess.InvalidMoveError,
             chess.AmbiguousMoveError):
@@ -105,13 +171,17 @@ def detect_input(raw: str) -> tuple[str, chess.Board]:
     raise ValueError(f"Cannot parse input as FEN, PGN file, or move list: {raw!r}")
 
 
-def parse_pgn_file(path: str) -> tuple[str, chess.Board]:
-    """Parse a PGN file and return the final position."""
+def parse_pgn_file(path: str, move: str | None = None) -> tuple[str, chess.Board]:
+    """Parse a PGN file and return the position at the specified move (or final)."""
     with open(path) as f:
         game = chess.pgn.read_game(f)
     if game is None:
         raise ValueError(f"No game found in PGN file: {path}")
-    board = game.end().board()
+
+    if move:
+        board = advance_to_move(game, move)
+    else:
+        board = game.end().board()
     return "pgn", board
 
 
@@ -613,9 +683,14 @@ def board_display(board: chess.Board) -> str:
 
 # ── Main analysis ─────────────────────────────────────────────────────────────
 
-def analyze_position(board: chess.Board) -> dict:
-    """Full position analysis returning structured data."""
-    return {
+def analyze_position(board: chess.Board, engine: EngineEval | None = None,
+                     engine_depth: int = 20, engine_lines: int = 3) -> dict:
+    """Full position analysis returning structured data.
+
+    If engine is provided (and available), adds an 'engine' key with
+    Stockfish evaluation, top lines, and WDL statistics.
+    """
+    result = {
         "fen": board.fen(),
         "side_to_move": "white" if board.turn == chess.WHITE else "black",
         "move_number": board.fullmove_number,
@@ -627,6 +702,7 @@ def analyze_position(board: chess.Board) -> dict:
         "king_safety": analyze_king_safety(board),
         "space": analyze_space(board),
         "pins": analyze_pins(board),
+        "tactics": analyze_tactics(board),
         "development": analyze_development(board),
         "game_phase": detect_game_phase(board),
         "legal_moves": get_legal_moves(board),
@@ -634,6 +710,22 @@ def analyze_position(board: chess.Board) -> dict:
         "is_checkmate": board.is_checkmate(),
         "is_stalemate": board.is_stalemate(),
     }
+
+    # Engine evaluation (optional)
+    if engine and engine.available:
+        eval_result = engine.evaluate_position(board, depth=engine_depth)
+        multipv = engine.evaluate_multipv(board, num_lines=engine_lines,
+                                          depth=engine_depth)
+        result["engine"] = {
+            "eval": eval_result,
+            "top_lines": multipv,
+            "depth": engine_depth,
+            "available": True,
+        }
+    else:
+        result["engine"] = {"available": False}
+
+    return result
 
 
 def format_text(data: dict) -> str:
@@ -756,6 +848,106 @@ def format_text(data: dict) -> str:
             lines.append(f"  {p['pinned_piece']} pinned by {p['pinner']}")
         lines.append("")
 
+    # Tactics
+    if "tactics" in data:
+        tac = data["tactics"]
+        has_tactics = False
+        tac_lines = ["── Tactics ──"]
+
+        # Static
+        static = tac.get("static", {})
+        if static.get("pins"):
+            for p in static["pins"]:
+                tac_lines.append(f"  Pin ({p['pin_type']}): {p['pinned_piece']} pinned to {p['pinned_to']} by {p['pinner']}")
+            has_tactics = True
+        if static.get("batteries"):
+            for b in static["batteries"]:
+                tac_lines.append(f"  Battery: {', '.join(b['pieces'])} on {b['line']} [{b['side']}]")
+            has_tactics = True
+        if static.get("hanging_pieces"):
+            for h in static["hanging_pieces"]:
+                tac_lines.append(f"  Hanging: {h['piece']} ({h['type']}) [{h['side']}]")
+            has_tactics = True
+        if static.get("overloaded_pieces"):
+            for o in static["overloaded_pieces"]:
+                tac_lines.append(f"  Overloaded: {o['piece']} guarding {', '.join(o['guarding'])} [{o['side']}]")
+            has_tactics = True
+        for side_name in ["white", "black"]:
+            wbr = static.get("weak_back_rank", {}).get(side_name, {})
+            if wbr.get("is_weak"):
+                tac_lines.append(f"  Weak back rank: {side_name}")
+                has_tactics = True
+        if static.get("trapped_pieces"):
+            for t in static["trapped_pieces"]:
+                tac_lines.append(f"  Trapped: {t['piece']} [{t['side']}]")
+            has_tactics = True
+        if static.get("advanced_passed_pawns"):
+            for a in static["advanced_passed_pawns"]:
+                prot = " (protected)" if a["is_protected"] else ""
+                tac_lines.append(f"  Advanced passed pawn: {a['square']} rank {a['rank']}{prot} [{a['side']}]")
+            has_tactics = True
+        if static.get("xray_attacks"):
+            for x in static["xray_attacks"]:
+                tac_lines.append(f"  X-ray: {x['attacker']} through {x['through']} to {x['target']} [{x['side']}]")
+            has_tactics = True
+        if static.get("alignments"):
+            for a in static["alignments"]:
+                tac_lines.append(f"  Alignment: {', '.join(a['pieces'])} on {a['line']} (potential {a['potential']}) [{a['side']}]")
+            has_tactics = True
+
+        # Threats
+        threats = tac.get("threats", {})
+        if threats.get("forks"):
+            for f in threats["forks"]:
+                tac_lines.append(f"  Fork: {f['move']} ({f['forking_piece']} attacks {', '.join(f['targets'])}) [{f['side']}]")
+            has_tactics = True
+        if threats.get("skewers"):
+            for s in threats["skewers"]:
+                tac_lines.append(f"  Skewer: {s['move']} ({s['skewering_piece']} through {s['front_target']} to {s['rear_target']}) [{s['side']}]")
+            has_tactics = True
+        if threats.get("discovered_attacks"):
+            for d in threats["discovered_attacks"]:
+                tac_lines.append(f"  Discovered attack: {d['move']} reveals {d['revealed_attacker']} on {d['target']} [{d['side']}]")
+            has_tactics = True
+        if threats.get("discovered_checks"):
+            for d in threats["discovered_checks"]:
+                tac_lines.append(f"  Discovered check: {d['move']} reveals {d['checking_piece']} [{d['side']}]")
+            has_tactics = True
+        if threats.get("double_checks"):
+            for d in threats["double_checks"]:
+                tac_lines.append(f"  Double check: {d['move']} ({', '.join(d['checkers'])}) [{d['side']}]")
+            has_tactics = True
+        if threats.get("back_rank_mates"):
+            for m in threats["back_rank_mates"]:
+                tac_lines.append(f"  Back rank mate: {m['move']} [{m['side']}]")
+            has_tactics = True
+        if threats.get("removal_of_guard"):
+            for r in threats["removal_of_guard"]:
+                tac_lines.append(f"  Removal of guard: {r['move']} captures {r['captured_guard']}, exposes {r['exposed_piece']} [{r['side']}]")
+            has_tactics = True
+
+        # Sequences
+        seqs = tac.get("sequences", {})
+        if seqs.get("deflections"):
+            for d in seqs["deflections"]:
+                tac_lines.append(f"  Deflection: {d['forcing_move']} → {d['followup']} [{d['side']}]")
+            has_tactics = True
+        if seqs.get("zwischenzug"):
+            for z in seqs["zwischenzug"]:
+                tac_lines.append(f"  Zwischenzug: after {z['capture']}, {z['zwischenzug_move']} [{z['side']}]")
+            has_tactics = True
+        if seqs.get("smothered_mates"):
+            for s in seqs["smothered_mates"]:
+                if "move" in s:
+                    tac_lines.append(f"  Smothered mate: {s['move']} [{s['side']}]")
+                elif "sequence" in s:
+                    tac_lines.append(f"  Smothered mate: {' → '.join(s['sequence'])} [{s['side']}]")
+            has_tactics = True
+
+        if has_tactics:
+            lines.extend(tac_lines)
+            lines.append("")
+
     # Development
     dev = data["development"]
     lines.append("── Development ──")
@@ -765,6 +957,32 @@ def format_text(data: dict) -> str:
         if d["pieces_on_starting_squares"]:
             lines.append(f"    Still home: {', '.join(d['pieces_on_starting_squares'])}")
     lines.append("")
+
+    # Engine evaluation
+    eng = data.get("engine", {})
+    if eng.get("available") and eng.get("eval"):
+        ev = eng["eval"]
+        lines.append("── Engine ──")
+        score_str = ev["score_display"]
+        if ev["mate_in"] is not None:
+            lines.append(f"  Evaluation: {score_str} (mate in {abs(ev['mate_in'])})")
+        else:
+            lines.append(f"  Evaluation: {score_str}")
+        if ev.get("wdl"):
+            w, d, l = ev["wdl"]["win"], ev["wdl"]["draw"], ev["wdl"]["loss"]
+            lines.append(f"  WDL: {w/10:.1f}% / {d/10:.1f}% / {l/10:.1f}%")
+        lines.append(f"  Best move: {ev['best_move']}")
+        if ev.get("pv"):
+            lines.append(f"  PV: {' '.join(ev['pv'][:8])}")
+
+        top = eng.get("top_lines")
+        if top and len(top) > 1:
+            lines.append(f"  Top {len(top)} lines:")
+            for i, line in enumerate(top, 1):
+                pv_str = " ".join(line.get("pv", [])[:6])
+                lines.append(f"    {i}. ({line['score_display']}) {pv_str}")
+        lines.append(f"  Depth: {eng.get('depth', '?')}")
+        lines.append("")
 
     # Status
     if data["is_checkmate"]:
@@ -790,21 +1008,44 @@ def main():
     parser.add_argument("position", help="FEN string, PGN file path, or move list")
     parser.add_argument("--format", choices=["json", "text"], default="json",
                         help="Output format (default: json)")
+    parser.add_argument("--move", default=None,
+                        help="Move number to analyze, e.g. '15' (after White's 15th) "
+                             "or '15b' (after Black's 15th). PGN and move-list only.")
+    parser.add_argument("--engine", action="store_true", default=False,
+                        help="Enable Stockfish engine evaluation")
+    parser.add_argument("--depth", type=int, default=20,
+                        help="Engine search depth (default: 20)")
+    parser.add_argument("--lines", type=int, default=3,
+                        help="Number of engine lines to show (default: 3)")
     args = parser.parse_args()
 
     try:
-        input_type, board = detect_input(args.position)
+        input_type, board = detect_input(args.position, args.move)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    data = analyze_position(board)
-    data["input_type"] = input_type
+    engine = None
+    if args.engine:
+        engine = EngineEval()
+        engine.open()
+        if not engine.available:
+            print("Warning: Stockfish not found, engine evaluation disabled",
+                  file=sys.stderr)
+            engine = None
 
-    if args.format == "text":
-        print(format_text(data))
-    else:
-        print(json.dumps(data, indent=2))
+    try:
+        data = analyze_position(board, engine=engine,
+                                engine_depth=args.depth, engine_lines=args.lines)
+        data["input_type"] = input_type
+
+        if args.format == "text":
+            print(format_text(data))
+        else:
+            print(json.dumps(data, indent=2))
+    finally:
+        if engine:
+            engine.close()
 
 
 if __name__ == "__main__":

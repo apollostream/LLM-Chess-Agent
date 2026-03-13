@@ -18,6 +18,7 @@ interface SSEState {
 interface SSEActions {
   start: (url: string, body: unknown) => void;
   stop: () => void;
+  reset: () => void;
 }
 
 export function useSSE(): [SSEState, SSEActions] {
@@ -33,6 +34,12 @@ export function useSSE(): [SSEState, SSEActions] {
     setStreaming(false);
     setProgress(null);
   }, []);
+
+  const reset = useCallback(() => {
+    stop();
+    setData("");
+    setError(null);
+  }, [stop]);
 
   const start = useCallback(
     async (url: string, body: unknown) => {
@@ -101,5 +108,5 @@ export function useSSE(): [SSEState, SSEActions] {
     [stop],
   );
 
-  return [{ data, streaming, error, progress }, { start, stop }];
+  return [{ data, streaming, error, progress }, { start, stop, reset }];
 }

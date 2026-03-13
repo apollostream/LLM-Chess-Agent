@@ -53,11 +53,15 @@ function App() {
 
   // When FEN changes, check cache for previous Claude output
   useEffect(() => {
-    // Try to show cached content for current position
-    const defaultCached = claudeCache.current.get(cacheKey(game.fen, "guide"));
+    const guideCached = claudeCache.current.get(cacheKey(game.fen, "guide"));
     const deepCached = claudeCache.current.get(cacheKey(game.fen, "deep"));
-    setCachedContent(defaultCached ?? deepCached ?? null);
-  }, [game.fen]);
+    const cached = guideCached ?? deepCached ?? null;
+    if (cached) {
+      sseActions.reset();
+      setActiveMode(guideCached ? "guide" : "deep");
+    }
+    setCachedContent(cached);
+  }, [game.fen, sseActions]);
 
   // Determine what to display in Claude output
   const claudeContent = sseState.data || cachedContent || "";
@@ -121,7 +125,9 @@ function App() {
 
   const handleMomentClick = useCallback(
     (m: CriticalMoment) => {
-      const halfMove = (m.move_number - 1) * 2 + (m.side === "black" ? 2 : 1);
+      // Navigate to position BEFORE the critical move (fen_before)
+      // so the board matches what was analyzed and cached
+      const halfMove = (m.move_number - 1) * 2 + (m.side === "black" ? 1 : 0);
       actions.goToMove(halfMove);
     },
     [actions],
@@ -156,6 +162,7 @@ function App() {
     const sKey = synopsisCacheKey(selectedMoments);
     const cached = claudeCache.current.get(sKey);
     if (cached) {
+      sseActions.reset();
       setActiveMode("synopsis");
       activeSynopsisKey.current = sKey;
       setCachedContent(cached);

@@ -51,8 +51,13 @@ function App() {
     }
   }, [sseState.streaming, sseState.data, activeMode, game.fen]);
 
-  // When FEN changes, check cache for previous Claude output
+  // When FEN changes, check cache for previous Claude output.
+  // Only auto-show cached content when not actively streaming.
+  const prevFen = useRef(game.fen);
   useEffect(() => {
+    if (prevFen.current === game.fen) return; // only on actual FEN change
+    prevFen.current = game.fen;
+
     const guideCached = claudeCache.current.get(cacheKey(game.fen, "guide"));
     const deepCached = claudeCache.current.get(cacheKey(game.fen, "deep"));
     const cached = guideCached ?? deepCached ?? null;

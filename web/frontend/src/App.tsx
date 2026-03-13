@@ -11,6 +11,7 @@ import { useChessGame } from "./hooks/useChessGame";
 import { useAnalysis } from "./hooks/useAnalysis";
 import { useSSE } from "./hooks/useSSE";
 import { detectNarrative } from "./api/client";
+import { openReport } from "./utils/exportReport";
 import type { CriticalMoment } from "./api/types";
 
 /** Cache key for Claude output: FEN|mode or synopsis|<moments hash> */
@@ -182,6 +183,16 @@ function App() {
     });
   }, [pgnText, moments, selectedMoments, sseActions]);
 
+  const handleExport = useCallback(() => {
+    if (!claudeContent) return;
+    const selected = moments.filter((m) => selectedMoments.has(momentKey(m)));
+    openReport({
+      markdown: claudeContent,
+      mode: activeMode || "guide",
+      moments: activeMode === "synopsis" ? selected : undefined,
+    });
+  }, [claudeContent, activeMode, moments, selectedMoments]);
+
   const shapes = useMemo(() => {
     if (!analysis?.tactics) return [];
     return tacticsToShapes(analysis.tactics);
@@ -300,6 +311,11 @@ function App() {
             {sseState.streaming && (
               <button onClick={sseActions.stop} className="btn btn-danger">
                 Stop
+              </button>
+            )}
+            {claudeContent && !sseState.streaming && (
+              <button onClick={handleExport} className="btn btn-secondary">
+                Export
               </button>
             )}
           </div>

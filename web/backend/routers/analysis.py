@@ -1,11 +1,13 @@
-"""Analysis endpoints: /analyze, /tactics, /engine, /classify."""
+"""Analysis endpoints: /analyze, /tactics, /engine, /classify, /board.svg."""
 
 from __future__ import annotations
 
 import asyncio
 
 import chess
-from fastapi import APIRouter, HTTPException
+import chess.svg
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 
 from models.schemas import AnalyzeRequest, TacticsRequest, EngineRequest, ClassifyRequest
 from services.cache import analysis_cache, tactics_cache, engine_cache
@@ -80,3 +82,15 @@ async def classify(req: ClassifyRequest):
     if result is None:
         raise HTTPException(status_code=503, detail="Stockfish engine not available")
     return result
+
+
+@router.get("/board.svg")
+async def board_svg(
+    fen: str = Query(..., description="FEN position string"),
+    size: int = Query(360, ge=100, le=800),
+):
+    """Render a board position as SVG."""
+    _validate_fen(fen)
+    board = chess.Board(fen)
+    svg = chess.svg.board(board, size=size)
+    return Response(content=svg, media_type="image/svg+xml")

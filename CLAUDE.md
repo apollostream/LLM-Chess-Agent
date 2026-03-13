@@ -33,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Game narrative — detect critical moments in a PGN
 # (used as a library from Python, not a standalone CLI)
 # from game_narrative import detect_critical_moments, GameNarrative, render_game_story
-# moments = detect_critical_moments("game.pgn", depth=18, threshold_cp=50)
+# moments = detect_critical_moments("game.pgn", depth=18, threshold_cp=50, decay_scale_cp=750)
 
 # Install dependencies
 source .venv/bin/activate && pip install -r requirements.txt
@@ -49,18 +49,20 @@ This is a Claude Code skill project. The skill analyzes chess positions through 
 
 **`tactical_motifs.py`** detects 19 tactical patterns across three tiers: static board patterns (pins, batteries, x-rays, hanging/overloaded/trapped pieces, weak back rank, advanced passed pawns, alignments), single-move threats (forks, skewers, discovered attacks/checks, double checks, back rank mates, removal of guard), and 2-move forced sequences (deflections, zwischenzug, smothered mates). Called by `board_utils.py` and produces the `tactics` key in the analysis JSON.
 
-**Two analysis modes** are defined in `SKILL.md`:
-- **Default**: Scan all 10 imbalances, synthesize, recommend plans. Saves full analysis to `analysis/` and prints a concise summary.
+**Three analysis modes** are defined in `SKILL.md`:
+- **Guide** (default): PV-grounded Player's Guide — scan all 10 imbalances with engine multi-PV lines, synthesize, recommend concrete plans referencing specific engine variations.
 - **Deep** (`--deep`): Full BFIH protocol — competing hypotheses, paradigm inversion, evidence matrix. Protocol defined in `references/bfih_chess_protocol.md`.
-- **Narrative** (`--narrative`): Full-game engine sweep → critical moment detection → arc classification → game story. Requires PGN input.
+- **Synopsis** (`--narrative`): Full-game engine sweep → critical moment detection → PV-grounded Player's Guide per moment → synthesis into coherent game narrative. Requires PGN input.
 
 **BFIH enforcement pipeline** (`--deep` mode): Three CLI tools support deep analysis. `bfih_models.py` defines Pydantic v2 models for the 9 BFIH phases with built-in validation constraints. `bfih_validator.py` is a CLI tool Claude Code calls after generating each phase's JSON — it validates against models and enforces cross-phase gates (G2, G5, G6, G8). `bfih_formatter.py` renders validated phase JSON to markdown. Claude Code follows SKILL.md's step-by-step deep mode protocol; Python provides validation and formatting, not orchestration.
 
-**`game_narrative.py`** provides the full-game narrative pipeline. `detect_critical_moments()` sweeps every move with Stockfish, flags eval swings above a threshold, and returns sorted `CriticalMoment` objects. `GameNarrative` and related Pydantic models define the game story structure (arc type, critical moments, turning point, key lessons). `render_game_story()` renders a completed narrative to markdown. Claude Code uses this as a library — detection is automated, narrative synthesis is Claude's job.
+**`game_narrative.py`** provides the full-game narrative pipeline. `detect_critical_moments()` sweeps every move with Stockfish, flags eval swings above a threshold, and returns sorted `CriticalMoment` objects. An exponential decay factor (`decay_scale_cp`, default 750) raises the effective threshold in lopsided positions — `effective = threshold / exp(-|eval|/A)` — suppressing noise when the game is already decided while still flagging important conversion errors. `GameNarrative` and related Pydantic models define the game story structure (arc type, critical moments, turning point, key lessons). `render_game_story()` renders a completed narrative to markdown. Claude Code uses this as a library — detection is automated, narrative synthesis is Claude's job.
 
 **`engine_eval.py`** wraps Stockfish via python-chess's UCI protocol. Context-managed `EngineEval` class provides `evaluate_position()`, `evaluate_multipv()`, and `classify_move()`. Auto-discovers Stockfish binary; gracefully returns `None` when unavailable. Called by `board_utils.py` when `--engine` flag is passed, producing the `engine` key in the analysis JSON.
 
 **`parse_position.sh`** is a thin wrapper that resolves `.venv/bin/python` and forwards args to `board_utils.py`. Always use the venv Python, never system Python.
+
+**Web backend** (`web/backend/`): FastAPI app serving the React frontend. `agent_service.py` streams Claude Code SDK calls with three prompt modes: `guide` (PV-grounded Player's Guide), `deep` (BFIH), `synthesis` (game synopsis from pre-built guides). `synopsis_service.py` orchestrates the Game Synopsis pipeline: parallel engine+analysis → sequential cached Player's Guides → streaming synthesis. All results cached via `cache.py` (AnalysisCache, AgentCache).
 
 ## Coding Rules
 

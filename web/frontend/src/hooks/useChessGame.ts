@@ -35,7 +35,7 @@ export interface ChessGameActions {
 
 const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-/** Strip annotations that chess.js can't parse: comments {…} and variations (…). */
+/** Strip annotations that chess.js can't parse: comments {…}, variations (…), symbols. */
 function stripAnnotations(pgn: string): string {
   // Remove nested variations (parentheses can nest)
   let result = pgn;
@@ -48,9 +48,12 @@ function stripAnnotations(pgn: string): string {
   result = result.replace(/\{[^}]*\}/g, "");
   // Remove NAGs like $1, $2, etc.
   result = result.replace(/\$\d+/g, "");
-  // Remove chess.com annotations like ± ? ?? ! !! ?! !? after moves
-  // but preserve the result token (1-0, 0-1, 1/2-1/2, *)
-  result = result.replace(/([a-h1-8O+#=NBRQK])\s*[?!±∓⩲⩱∞]+/g, "$1");
+  // Remove standalone eval/annotation symbols (±, ∓, ⩲, ⩱, ∞, ?, !, etc.)
+  // These can appear with or without space after a move
+  result = result.replace(/[±∓⩲⩱∞⊥]+/g, "");
+  result = result.replace(/([a-h1-8O+#=NBRQK])\s*([?!]+)/g, "$1");
+  // Remove orphaned black move numbers (e.g. "9..." left after variation removal)
+  result = result.replace(/\d+\.{3}\s*/g, "");
   // Collapse whitespace
   result = result.replace(/\s+/g, " ").trim();
   return result;

@@ -107,6 +107,8 @@ async def agent_synopsis(req: SynopsisRequest):
         )
 
     async def _caching_synopsis() -> AsyncIterator[str]:
+        from services.synopsis_service import save_synopsis
+
         accumulated: list[str] = []
         async for chunk in stream_synopsis(
             moments=req.moments,
@@ -125,7 +127,10 @@ async def agent_synopsis(req: SynopsisRequest):
             yield chunk
 
         if accumulated:
-            agent_cache.put(*cache_parts, value="".join(accumulated))
+            text = "".join(accumulated)
+            agent_cache.put(*cache_parts, value=text)
+            # Save to analysis/ directory with board SVGs
+            save_synopsis(text, req.moments, req.pgn)
 
     return StreamingResponse(
         _caching_synopsis(),

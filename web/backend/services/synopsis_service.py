@@ -9,12 +9,23 @@ Orchestrates three phases:
 from __future__ import annotations
 
 import asyncio
+import io
 import json
+import re
 from collections.abc import AsyncIterator
+from datetime import date
+from pathlib import Path
 
+import chess
+import chess.pgn
+import chess.svg
+
+from config import PROJECT_ROOT
 from services.agent_service import stream_agent, _sse
 from services.cache import agent_cache, analysis_cache, engine_cache
 from services import chess_pipeline
+
+ANALYSIS_DIR = PROJECT_ROOT / "analysis"
 
 
 async def stream_synopsis(
@@ -139,3 +150,85 @@ async def stream_synopsis(
         n_moments=n,
     ):
         yield chunk
+
+
+def _slugify(text: str) -> str:
+    """Convert text to a filename-safe slug."""
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    return text[:40].rstrip("-")
+
+
+def _extract_players(pgn: str) -> tuple[str, str]:
+    """Extract White and Black player names from PGN headers."""
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    if game is None:
+        return ("white", "black")
+    white = game.headers.get("White", "white")
+    black = game.headers.get("Black", "black")
+    return (white, black)
+
+
+def save_synopsis(
+    synopsis_text: str,
+    moments: list[dict],
+    pgn: str,
+) -> Path:
+    """Save synopsis markdown and board SVGs to the analysis directory.
+
+    Returns the path to the saved markdown file.
+    """
+    ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
+
+    white, black = _extract_players(pgn)
+    today = date.today().isoformat()
+    slug = _slugify(f"{white}-vs-{black}-synopsis")
+    base_name = f"{today}_{slug}"
+
+    # Generate board SVGs for each critical moment
+    board_refs: list[str] = []
+    for m in moments:
+        fen = m["fen_before"]
+        board = chess.Board(fen)
+        svg = chess.svg.board(board, size=400)
+
+        side_char = m["side"][0]
+        svg_name = f"{base_name}_move{m['move_number']}{side_char}.svg"
+        svg_path = ANALYSIS_DIR / svg_name
+        svg_path.write_text(svg)
+
+        dots = "..." if m["side"] == "black" else "."
+        label = f"{m['move_number']}{dots}{m['san']}"
+        board_refs.append((m["move_number"], m["side"], svg_name, label, m.get("classification", "")))
+
+    # Inject board image references into the synopsis markdown
+    lines = synopsis_text.split("\n")
+    result_lines: list[str] = []
+    pending = list(board_refs)
+
+    for i, line in enumerate(lines):
+        result_lines.append(line)
+        # At paragraph boundaries, check if this paragraph mentions a pending moment
+        next_blank = i + 1 >= len(lines) or lines[i + 1].strip() == ""
+        if next_blank and line.strip() and pending:
+            for j, (move_num, side, svg_name, label, classification) in enumerate(pending):
+                dots_re = r"\.\.\." if side == "black" else r"\."
+                pat = re.compile(rf"\b{move_num}{dots_re}|[Mm]ove\s+{move_num}\b")
+                if pat.search(line):
+                    result_lines.append("")
+                    result_lines.append(f"![Before {label} ({classification})]({svg_name})")
+                    pending.pop(j)
+                    break
+
+    # Append any unmatched boards at the end
+    for move_num, side, svg_name, label, classification in pending:
+        result_lines.append("")
+        result_lines.append(f"![Before {label} ({classification})]({svg_name})")
+
+    final_md = "\n".join(result_lines)
+
+    md_path = ANALYSIS_DIR / f"{base_name}.md"
+    md_path.write_text(final_md)
+
+    return md_path

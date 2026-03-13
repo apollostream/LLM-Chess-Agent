@@ -1,6 +1,0 @@
-{
-  "name": "chess-imbalances",
-  "version": "0.1.0",
-  "description": "Chess position analysis using Silman's imbalance framework",
-  "skills": ["skills/chess-imbalances/SKILL.md"]
-}

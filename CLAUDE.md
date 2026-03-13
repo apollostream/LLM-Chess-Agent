@@ -13,22 +13,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 .venv/bin/pytest tests/test_board_utils.py::TestPawnStructure::test_passed_pawn -v
 
 # Analyze a position (JSON output)
-skills/chess-imbalances/scripts/parse_position.sh "<FEN>"
+.claude/skills/chess-imbalances/scripts/parse_position.sh "<FEN>"
 
 # Analyze with text output, or at a specific move
-skills/chess-imbalances/scripts/parse_position.sh game.pgn --format text --move 15b
+.claude/skills/chess-imbalances/scripts/parse_position.sh game.pgn --format text --move 15b
 
 # Analyze with Stockfish engine evaluation
-skills/chess-imbalances/scripts/parse_position.sh "<FEN>" --format text --engine --depth 20 --lines 3
+.claude/skills/chess-imbalances/scripts/parse_position.sh "<FEN>" --format text --engine --depth 20 --lines 3
 
 # BFIH validator — validate a single phase or all phases
-.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-phase 1 analysis/bfih_phases/phase_1.json
-.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-all analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json
-.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py schema 3
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_validator.py validate-phase 1 analysis/bfih_phases/phase_1.json
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_validator.py validate-all analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_validator.py schema 3
 
 # BFIH formatter — render validated phases to markdown
-.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --output analysis/deep-analysis.md
-.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --output analysis/deep-analysis.md
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
 
 # Game narrative — detect critical moments in a PGN
 # (used as a library from Python, not a standalone CLI)

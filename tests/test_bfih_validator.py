@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "chess-imbalances" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"))
 
 from bfih_validator import (
     validate_phase, validate_all, export_schema,
@@ -32,7 +32,7 @@ from test_bfih_models import (
     make_reflexive_review, make_synthesis, make_discomfort_heuristic,
 )
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "skills" / "chess-imbalances" / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"
 VALIDATOR = SCRIPTS_DIR / "bfih_validator.py"
 PYTHON = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"
 

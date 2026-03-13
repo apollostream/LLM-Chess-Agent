@@ -57,7 +57,7 @@ Follow Silman's 5-step assessment technique, mapped to concrete actions:
 Run the position through `board_utils.py` to get structured JSON:
 
 ```bash
-skills/chess-imbalances/scripts/parse_position.sh "<FEN_OR_INPUT>" --format json
+.claude/skills/chess-imbalances/scripts/parse_position.sh "<FEN_OR_INPUT>" --format json
 ```
 
 If the script is unavailable or fails, analyze the position directly from the FEN using your chess knowledge — the script is a tool, not a requirement.
@@ -103,7 +103,7 @@ When the user appends `--deep` or asks for deep analysis, follow this enforced p
 Run `parse_position.sh` and save the output:
 
 ```bash
-skills/chess-imbalances/scripts/parse_position.sh "<FEN_OR_INPUT>" --format json --engine --depth 20 --lines 3 > analysis/bfih_phases/position_data.json
+.claude/skills/chess-imbalances/scripts/parse_position.sh "<FEN_OR_INPUT>" --format json --engine --depth 20 --lines 3 > analysis/bfih_phases/position_data.json
 ```
 
 If Stockfish is unavailable the `--engine` flag is silently ignored and the `engine` key will be absent from the output. The analysis proceeds without engine data.
@@ -118,13 +118,13 @@ For **each phase** (1 through 9):
 2. **Write**: Save to `analysis/bfih_phases/phase_N.json`
 3. **Validate**: Run the validator:
    ```bash
-   .venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-phase N analysis/bfih_phases/phase_N.json --prior-phases analysis/bfih_phases/
+   .venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_validator.py validate-phase N analysis/bfih_phases/phase_N.json --prior-phases analysis/bfih_phases/
    ```
    For Phase 8, add `--position-data analysis/bfih_phases/position_data.json` to check candidate move legality (gate G8).
 4. **If validation fails**: Read the error, fix the JSON, rewrite, and re-validate (max 2 retries).
 5. **If 3 failures**: Note the degradation in the output, continue to the next phase.
 
-To see the JSON schema for any phase: `.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py schema N`
+To see the JSON schema for any phase: `.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_validator.py schema N`
 
 #### Phase Details
 
@@ -165,13 +165,13 @@ After all 9 phases are validated, generate **two documents**:
 
 ```bash
 # Player's Guide — concise, coach-style narrative for learning
-.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py guide analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json --output analysis/<filename>-guide.md
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_formatter.py guide analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json --output analysis/<filename>-guide.md
 
 # Full BFIH Report — complete 9-phase analytical backing
-.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json --output analysis/<filename>.md
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json --output analysis/<filename>.md
 
 # Console summary
-.venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
 ```
 
 The Player's Guide is the primary output — it's what a player reads to understand the position. The full BFIH report is the supporting evidence.
@@ -181,7 +181,7 @@ The Player's Guide is the primary output — it's what a player reads to underst
 Validate all phases and gates at once:
 
 ```bash
-.venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-all analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json
+.venv/bin/python .claude/skills/chess-imbalances/scripts/bfih_validator.py validate-all analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json
 ```
 
 ## Narrative Mode Workflow
@@ -194,7 +194,7 @@ Run the engine sweep to find turning points:
 
 ```python
 import sys
-sys.path.insert(0, "skills/chess-imbalances/scripts")
+sys.path.insert(0, ".claude/skills/chess-imbalances/scripts")
 from game_narrative import detect_critical_moments
 
 moments = detect_critical_moments("path/to/game.pgn", depth=18, threshold_cp=50)

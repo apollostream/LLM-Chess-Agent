@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "chess-imbalances" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bfih_formatter import (
@@ -27,7 +27,7 @@ from test_bfih_models import (
     make_reflexive_review, make_synthesis, make_discomfort_heuristic,
 )
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "skills" / "chess-imbalances" / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"
 FORMATTER = SCRIPTS_DIR / "bfih_formatter.py"
 PYTHON = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"
 

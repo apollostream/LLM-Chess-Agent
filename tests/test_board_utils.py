@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 # Add scripts to path so we can import board_utils
-sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "chess-imbalances" / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"))
 import board_utils
 
 

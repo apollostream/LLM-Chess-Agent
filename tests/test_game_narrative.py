@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 # Add scripts dir to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "chess-imbalances" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"))
 
 from game_narrative import (
     CriticalMoment,

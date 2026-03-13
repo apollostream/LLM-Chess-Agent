@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 # Add scripts dir to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "chess-imbalances" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".claude" / "skills" / "chess-imbalances" / "scripts"))
 
 from bfih_models import (
     Paradigm, Confidence, Relevance, Direction, Likelihood, Assessment,

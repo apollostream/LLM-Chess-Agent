@@ -50,9 +50,11 @@ _SYNTHESIS_PROMPT = """Compose a Game Synopsis for this chess game.
 
 You are given Player's Guides for {n} critical positions — each is a PV-grounded positional analysis. Synthesize them into a coherent narrative.
 
+IMPORTANT: Each critical moment header includes "Engine best move: ..." — this is the engine's TOP recommendation at that position. When describing what should have been played, you MUST cite this move. Do not substitute alternative moves from lower-ranked engine lines or your own analysis.
+
 Structure:
 - Opening paragraph: set the scene (opening, early character of the game)
-- For each critical moment: what happened, why it mattered, what should have been played (reference the PV lines from the guide)
+- For each critical moment: what happened, why it mattered, what should have been played (cite the engine best move from the header)
 - Closing: the decisive moment, outcome, and key lessons
 
 PGN:

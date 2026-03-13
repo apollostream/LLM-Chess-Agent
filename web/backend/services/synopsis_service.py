@@ -111,10 +111,21 @@ async def stream_synopsis(
     # Build guides block
     guide_sections = []
     for m, guide_text in zip(moments, guides):
+        fen = m["fen_before"]
+        # Extract engine's top move for unambiguous reference
+        engine_best = ""
+        eng = engine_results.get(fen)
+        if eng and eng.get("top_lines"):
+            top = eng["top_lines"][0]
+            best_move = top.get("best_move", "")
+            score = top.get("score_display", "")
+            if best_move:
+                engine_best = f"\nEngine best move: {best_move} ({score})"
+
         section = (
             f"### Move {m['move_number']} ({m['side']}): {m['san']} "
             f"({m.get('classification', 'unknown')}, Δ{m.get('delta_cp', 0)}cp)\n"
-            f"FEN: {m['fen_before']}\n\n"
+            f"FEN: {fen}{engine_best}\n\n"
             f"{guide_text}\n\n---"
         )
         guide_sections.append(section)

@@ -470,6 +470,54 @@ Optionally cache Claude's entire narrative analysis keyed by FEN + analysis mode
 
 ---
 
+## Competitive Analysis: Why This Tool Is Different
+
+### The Landscape (March 2026)
+
+Every existing chess analysis tool follows the same architecture: **Engine evaluates → LLM narrates the engine's output.** The LLM is a translator, not a thinker.
+
+| Tool | Approach | Explains WHY? | Uses a Framework? | Imbalance Analysis? |
+|------|----------|--------------|-------------------|---------------------|
+| DecodeChess | Custom AI on Stockfish | Per-move concepts | No systematic framework | No |
+| ChessLogix | Stockfish + GPT-4/Claude | Claims to, no evidence | No | No |
+| Lichess | Pure Stockfish | No — pure numbers | No | No |
+| Chess.com | Stockfish + rule-based coach | Tactical observations only | No | No |
+| ChessMentor AI | Stockfish + Gemini chat | Ad-hoc LLM responses | No | No |
+| ChessAgine | MCP bridge to Stockfish | Depends on connected LLM | No | No |
+| MattPlaysChess | Stockfish + Claude narrative | Game-flow narrative | No | No |
+| **This project** | **board_utils.py + Claude** | **Systematic positional assessment** | **Silman's 10 imbalances + BFIH** | **Yes — the only one** |
+
+### What No One Has Built
+
+No tool provides systematic positional assessment through a strategic framework. The Silman imbalance methodology exists only as a human thinking process taught through books and coaching. Every tool works at the *move level* ("this move is good/bad because..."), none at the *position level* ("this position favors White because of these specific imbalances, therefore the plan should be...").
+
+### Academic Validation
+
+"Bridging the Gap between Expert and Language Models" (NAACL 2025) found:
+- GPT-4o alone: **36% correctness** in chess commentary
+- With engine guidance: **43%**
+- With structured concept extraction first: **60%** — matching human reference
+
+The paper's conclusion validates this project's architecture: you must extract positional concepts *before* the LLM interprets them. `board_utils.py` producing structured JSON is exactly the approach the research says is necessary.
+
+### What BFIH Adds
+
+Every existing tool presents its assessment as fact. But positional assessment is genuinely ambiguous — a space advantage might be strength or overextension, a pawn majority might be an asset or liability. BFIH deep mode does what no chess tool has attempted:
+
+1. **Competing hypotheses** — 2-4 genuinely competing positional assessments with probability assignments
+2. **Paradigm inversion** — forced argument for the opposite conclusion, not as straw man
+3. **Evidence matrix** — each imbalance explicitly mapped to each hypothesis
+4. **Reflexive review** — metacognition about the analysis itself ("Am I anchored by the engine number?")
+5. **Discomfort heuristic** — quality check on intellectual honesty
+
+The output is not "here's the answer." It's "here's how to think about this position, including the strongest case against my conclusion."
+
+### The Gap
+
+The market gap isn't "better engine eval" — Stockfish is superhuman. The gap is **positional thinking as a skill**. Every chess improvement book says you get better by learning to assess positions and form plans. Every software tool gives you engine lines instead. This tool is a chess *thinking* tool. Everyone else built chess *answering* tools.
+
+---
+
 ## Key Constraints
 
 - Agent SDK requires an Anthropic API key — you can't redistribute Claude Code's rate limits

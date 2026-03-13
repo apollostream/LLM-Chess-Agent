@@ -4,6 +4,7 @@ Tests critical moment detection, GameNarrative models, and rendering.
 """
 
 import json
+import math
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -18,8 +19,12 @@ from game_narrative import (
     CriticalMoment,
     GameNarrative,
     ArcType,
+    StoryPosition,
     detect_critical_moments,
+    eval_decay,
     render_game_story,
+    replay_to_position,
+    generate_narrative_boards,
 )
 
 
@@ -149,6 +154,47 @@ class TestGameNarrative:
         assert gn.game_metadata["result"] == "0-1"
 
 
+# ── TestEvalDecay ─────────────────────────────────────────────────────────
+
+class TestEvalDecay:
+    """Tests for the eval-based decay factor on critical moment threshold."""
+
+    def test_decay_at_zero_eval(self):
+        """At eval=0, decay should be 1.0 (no change to threshold)."""
+        assert eval_decay(0, 500) == pytest.approx(1.0)
+
+    def test_decay_is_symmetric(self):
+        """Positive and negative evals should produce the same decay."""
+        assert eval_decay(300, 500) == pytest.approx(eval_decay(-300, 500))
+
+    def test_decay_decreases_with_eval(self):
+        """Larger absolute eval should produce smaller decay (higher effective threshold)."""
+        d0 = eval_decay(0, 500)
+        d200 = eval_decay(200, 500)
+        d500 = eval_decay(500, 500)
+        d1000 = eval_decay(1000, 500)
+        assert d0 > d200 > d500 > d1000
+
+    def test_decay_with_scale_500(self):
+        """At A=500, eval=500 should give decay=exp(-1) ≈ 0.368."""
+        assert eval_decay(500, 500) == pytest.approx(math.exp(-1), abs=0.001)
+
+    def test_decay_always_positive(self):
+        """Decay should never reach zero, even at extreme evals."""
+        assert eval_decay(10000, 500) > 0
+
+    def test_effective_threshold_examples(self):
+        """Verify effective threshold = threshold_cp / decay at known values."""
+        # At eval=0: effective threshold = 50 / 1.0 = 50
+        assert 50 / eval_decay(0, 500) == pytest.approx(50.0)
+        # At eval=500: effective threshold = 50 / e^-1 ≈ 136
+        assert 50 / eval_decay(500, 500) == pytest.approx(50 * math.e, abs=1)
+
+    def test_decay_none_scale_disables(self):
+        """When decay_scale_cp is None, decay should be 1.0 (disabled)."""
+        assert eval_decay(1000, None) == pytest.approx(1.0)
+
+
 # ── TestDetectCriticalMoments ──────────────────────────────────────────────
 
 class TestDetectCriticalMoments:
@@ -199,6 +245,20 @@ class TestDetectCriticalMoments:
         # The first big swing should be around move 5 (Nbd2)
         moves = [cm.move_number for cm in moments]
         assert any(m <= 7 for m in moves), f"Expected early blunder, got moves: {moves}"
+
+    def test_decay_reduces_late_game_noise(self):
+        """With decay enabled, lopsided late-game swings should be filtered out."""
+        pgn_path = Path.home() / "Documents/Chess/Jade-BOT_vs_pjqweewrq_2026.03.11.pgn"
+        if not pgn_path.exists():
+            pytest.skip("Jade-BOT PGN not available")
+        no_decay = detect_critical_moments(pgn_path, depth=12, threshold_cp=50, decay_scale_cp=None)
+        with_decay = detect_critical_moments(pgn_path, depth=12, threshold_cp=50, decay_scale_cp=500)
+        # Decay should filter some moments in lopsided positions
+        assert len(with_decay) <= len(no_decay)
+        # But early moments (near equal eval) should mostly survive
+        early_no_decay = [m for m in no_decay if m.move_number <= 11]
+        early_with_decay = [m for m in with_decay if m.move_number <= 11]
+        assert len(early_with_decay) >= len(early_no_decay) - 1
 
 
 # ── TestRenderGameStory ────────────────────────────────────────────────────
@@ -258,3 +318,98 @@ class TestRenderGameStory:
         md = render_game_story(gn, output_path=output)
         assert output.exists()
         assert output.read_text() == md
+
+    def test_render_with_board_diagrams(self, tmp_path):
+        """When story_positions and pgn_text are provided, SVGs are generated and embedded."""
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        story = (
+            "An opening battle in the Italian Game set the tone.\n\n"
+            "**The early skirmish (moves 1-3).** White developed classically "
+            "with Nf3 and Bc4, aiming for rapid central control.\n\n"
+            "**The central break (moves 4-5).** d4 blew open the center and "
+            "led to a sharp tactical exchange that favored White."
+        )
+        gn = make_game_narrative(
+            game_story=story,
+            story_positions=[
+                {"move_number": 3, "side": "black"},
+                {"move_number": 5, "side": "white"},
+            ],
+        )
+        output = tmp_path / "story.md"
+        md = render_game_story(gn, output_path=output, pgn_text=pgn)
+
+        # SVG files should be created
+        svgs = list(tmp_path.glob("*.svg"))
+        assert len(svgs) == 2
+
+        # Markdown should embed the SVGs
+        assert "![" in md
+        assert ".svg)" in md
+
+        # First paragraph (intro) should not have a diagram
+        lines = md.split("\n")
+        intro_idx = next(i for i, l in enumerate(lines) if "opening battle" in l)
+        # The line after intro should not be an image
+        assert "![" not in lines[intro_idx + 1] if intro_idx + 1 < len(lines) else True
+
+
+# ── TestReplayToPosition ─────────────────────────────────────────────────
+
+class TestReplayToPosition:
+    def test_replay_white_move(self):
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        fen, label = replay_to_position(pgn, move_number=3, side="white")
+        # After 3. Bc4, should have bishop on c4
+        assert "B" in fen  # White bishop somewhere
+        assert label == "3.Bc4"
+
+    def test_replay_black_move(self):
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        fen, label = replay_to_position(pgn, move_number=3, side="black")
+        # After 3...Bc5
+        assert label == "3...Bc5"
+
+    def test_replay_last_move(self):
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        fen, label = replay_to_position(pgn, move_number=5, side="black")
+        assert "5..." in label
+
+    def test_replay_invalid_pgn(self):
+        with pytest.raises(ValueError, match="Invalid PGN"):
+            replay_to_position("", 1, "white")
+
+
+# ── TestGenerateNarrativeBoards ──────────────────────────────────────────
+
+class TestGenerateNarrativeBoards:
+    def test_generates_svgs(self, tmp_path):
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        positions = [
+            StoryPosition(move_number=3, side="black"),
+            StoryPosition(move_number=5, side="white"),
+        ]
+        paths = generate_narrative_boards(pgn, positions, tmp_path, "test")
+        assert len(paths) == 2
+        for p in paths:
+            assert p.exists()
+            assert p.suffix == ".svg"
+            content = p.read_text()
+            assert "<svg" in content
+
+    def test_auto_labels(self, tmp_path):
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        positions = [
+            StoryPosition(move_number=3, side="black"),
+        ]
+        generate_narrative_boards(pgn, positions, tmp_path, "test")
+        assert positions[0].label is not None
+        assert "After" in positions[0].label
+
+    def test_custom_label_preserved(self, tmp_path):
+        pgn = '[Event "Test"]\n[Result "1-0"]\n\n' + SAMPLE_PGN + "\n"
+        positions = [
+            StoryPosition(move_number=3, side="white", label="Custom label"),
+        ]
+        generate_narrative_boards(pgn, positions, tmp_path, "test")
+        assert positions[0].label == "Custom label"

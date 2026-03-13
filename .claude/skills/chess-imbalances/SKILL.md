@@ -6,6 +6,7 @@ description: >
   "assess imbalances", "evaluate position", "what should White/Black do",
   "analyze this position". Append --deep for full BFIH treatment.
   Append --no-save to skip file output.
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
 # Chess Imbalances Analysis Skill
@@ -202,6 +203,7 @@ moments = detect_critical_moments("path/to/game.pgn", depth=18, threshold_cp=50)
 
 - `depth`: Engine search depth per position (default 18; use 12 for quick sweeps).
 - `threshold_cp`: Minimum eval swing in centipawns to flag (default 50; use 80 for only major swings).
+- `decay_scale_cp`: Exponential decay constant (default 750). Raises the effective threshold in lopsided positions: `effective_threshold = threshold_cp / exp(-|eval| / A)`. Gentle decay that still flags important conversion errors (e.g., premature queen trades) while filtering trivial swings in decided positions. Set to `None` to disable.
 - Returns a list of `CriticalMoment` objects sorted by move number.
 
 ### Step 2: Review Critical Moments

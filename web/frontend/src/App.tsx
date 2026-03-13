@@ -277,14 +277,14 @@ function App() {
             <button
               onClick={handleAnalyze}
               disabled={!analysis || sseState.streaming}
-              className="btn btn-primary"
+              className={`btn ${activeMode === "guide" ? "btn-primary" : "btn-secondary"}`}
             >
               Player's Guide
             </button>
             <button
               onClick={handleDeepAnalysis}
               disabled={sseState.streaming}
-              className="btn btn-secondary"
+              className={`btn ${activeMode === "deep" ? "btn-primary" : "btn-secondary"}`}
             >
               Deep Analysis (BFIH)
             </button>
@@ -292,7 +292,7 @@ function App() {
               <button
                 onClick={handleSynopsis}
                 disabled={sseState.streaming}
-                className="btn btn-secondary"
+                className={`btn ${activeMode === "synopsis" ? "btn-primary" : "btn-secondary"}`}
               >
                 Game Synopsis ({selectedMoments.size} moments)
               </button>

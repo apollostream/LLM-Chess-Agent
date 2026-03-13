@@ -35,6 +35,27 @@ export interface ChessGameActions {
 
 const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+/** Strip annotations that chess.js can't parse: comments {…} and variations (…). */
+function stripAnnotations(pgn: string): string {
+  // Remove nested variations (parentheses can nest)
+  let result = pgn;
+  let prev = "";
+  while (prev !== result) {
+    prev = result;
+    result = result.replace(/\([^()]*\)/g, "");
+  }
+  // Remove comments
+  result = result.replace(/\{[^}]*\}/g, "");
+  // Remove NAGs like $1, $2, etc.
+  result = result.replace(/\$\d+/g, "");
+  // Remove chess.com annotations like ± ? ?? ! !! ?! !? after moves
+  // but preserve the result token (1-0, 0-1, 1/2-1/2, *)
+  result = result.replace(/([a-h1-8O+#=NBRQK])\s*[?!±∓⩲⩱∞]+/g, "$1");
+  // Collapse whitespace
+  result = result.replace(/\s+/g, " ").trim();
+  return result;
+}
+
 export function useChessGame(): [ChessGameState, ChessGameActions] {
   const [fen, setFenState] = useState(STARTING_FEN);
   const [moves, setMoves] = useState<string[]>([]);
@@ -51,7 +72,7 @@ export function useChessGame(): [ChessGameState, ChessGameActions] {
   const loadPgn = useCallback((pgn: string): boolean => {
     const game = new Chess();
     try {
-      game.loadPgn(pgn);
+      game.loadPgn(stripAnnotations(pgn));
     } catch {
       return false;
     }

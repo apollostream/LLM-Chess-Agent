@@ -41,13 +41,13 @@ def _cache_parts(req: AgentRequest) -> tuple[str, ...]:
 
 
 async def _cached_stream(text: str) -> AsyncIterator[str]:
-    """Replay cached text as SSE events."""
-    yield f"data: {text}\n\n"
-    yield "event: done\ndata: {}\n\n"
+    """Replay cached plain text as a single SSE text event."""
+    yield f"data: {json.dumps({'type': 'text', 'content': text})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
 async def _caching_stream(req: AgentRequest, parts: tuple[str, ...]) -> AsyncIterator[str]:
-    """Stream from agent, accumulate text, and cache the result."""
+    """Stream from agent, accumulate text content only, and cache the result."""
     accumulated: list[str] = []
     async for chunk in stream_agent(
         mode=req.mode,
@@ -57,9 +57,14 @@ async def _caching_stream(req: AgentRequest, parts: tuple[str, ...]) -> AsyncIte
         depth=req.depth,
         lines=req.lines,
     ):
-        # Extract text content from SSE data lines
+        # Extract just text content for caching
         if chunk.startswith("data: "):
-            accumulated.append(chunk[6:].rstrip("\n"))
+            try:
+                event = json.loads(chunk[6:].rstrip("\n"))
+                if event.get("type") == "text":
+                    accumulated.append(event["content"])
+            except json.JSONDecodeError:
+                pass
         yield chunk
 
     if accumulated:
@@ -112,11 +117,11 @@ async def agent_synopsis(req: SynopsisRequest):
             if chunk.startswith("data: "):
                 try:
                     event = json.loads(chunk[6:].rstrip("\n"))
-                    # Only accumulate text events (the final synopsis)
+                    # Only accumulate text content (the final synopsis)
                     if event.get("type") == "text":
-                        accumulated.append(chunk[6:].rstrip("\n"))
+                        accumulated.append(event["content"])
                 except json.JSONDecodeError:
-                    accumulated.append(chunk[6:].rstrip("\n"))
+                    pass
             yield chunk
 
         if accumulated:

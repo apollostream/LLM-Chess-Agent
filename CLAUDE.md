@@ -30,6 +30,11 @@ skills/chess-imbalances/scripts/parse_position.sh "<FEN>" --format text --engine
 .venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py render analysis/bfih_phases/ --output analysis/deep-analysis.md
 .venv/bin/python skills/chess-imbalances/scripts/bfih_formatter.py summary analysis/bfih_phases/
 
+# Game narrative — detect critical moments in a PGN
+# (used as a library from Python, not a standalone CLI)
+# from game_narrative import detect_critical_moments, GameNarrative, render_game_story
+# moments = detect_critical_moments("game.pgn", depth=18, threshold_cp=50)
+
 # Install dependencies
 source .venv/bin/activate && pip install -r requirements.txt
 ```
@@ -47,8 +52,11 @@ This is a Claude Code skill project. The skill analyzes chess positions through 
 **Two analysis modes** are defined in `SKILL.md`:
 - **Default**: Scan all 10 imbalances, synthesize, recommend plans. Saves full analysis to `analysis/` and prints a concise summary.
 - **Deep** (`--deep`): Full BFIH protocol — competing hypotheses, paradigm inversion, evidence matrix. Protocol defined in `references/bfih_chess_protocol.md`.
+- **Narrative** (`--narrative`): Full-game engine sweep → critical moment detection → arc classification → game story. Requires PGN input.
 
 **BFIH enforcement pipeline** (`--deep` mode): Three CLI tools support deep analysis. `bfih_models.py` defines Pydantic v2 models for the 9 BFIH phases with built-in validation constraints. `bfih_validator.py` is a CLI tool Claude Code calls after generating each phase's JSON — it validates against models and enforces cross-phase gates (G2, G5, G6, G8). `bfih_formatter.py` renders validated phase JSON to markdown. Claude Code follows SKILL.md's step-by-step deep mode protocol; Python provides validation and formatting, not orchestration.
+
+**`game_narrative.py`** provides the full-game narrative pipeline. `detect_critical_moments()` sweeps every move with Stockfish, flags eval swings above a threshold, and returns sorted `CriticalMoment` objects. `GameNarrative` and related Pydantic models define the game story structure (arc type, critical moments, turning point, key lessons). `render_game_story()` renders a completed narrative to markdown. Claude Code uses this as a library — detection is automated, narrative synthesis is Claude's job.
 
 **`engine_eval.py`** wraps Stockfish via python-chess's UCI protocol. Context-managed `EngineEval` class provides `evaluate_position()`, `evaluate_multipv()`, and `classify_move()`. Auto-discovers Stockfish binary; gracefully returns `None` when unavailable. Called by `board_utils.py` when `--engine` flag is passed, producing the `engine` key in the analysis JSON.
 

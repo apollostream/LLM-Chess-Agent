@@ -16,6 +16,7 @@ Analyze any chess position through Jeremy Silman's 10-imbalance framework from *
 
 - **Default mode:** Systematic imbalance catalog + strategic narrative. Fast, practical, covers all 10 categories.
 - **Deep mode** (triggered by `--deep`): Full BFIH protocol — competing hypotheses, paradigm inversion, evidence matrix, reflexive review. For positions with genuine strategic tension where the "obvious" assessment might be wrong.
+- **Narrative mode** (triggered by `--narrative`): Full-game analysis — engine sweep for critical moments, arc classification, game story. Requires a PGN file as input.
 - **`--no-save`**: Skip file output; print the full analysis to the console only.
 - **`--save`** (default): Write the full analysis to a markdown file and print a concise summary to the console.
 - **`--engine`**: Enable Stockfish engine evaluation (requires Stockfish installed). Adds eval, best move, PV, WDL%, and top N lines.
@@ -182,6 +183,93 @@ Validate all phases and gates at once:
 ```bash
 .venv/bin/python skills/chess-imbalances/scripts/bfih_validator.py validate-all analysis/bfih_phases/ --position-data analysis/bfih_phases/position_data.json
 ```
+
+## Narrative Mode Workflow
+
+When the user appends `--narrative` or asks for a game narrative/game story, follow this protocol. Requires a PGN file as input.
+
+### Step 1: Detect Critical Moments
+
+Run the engine sweep to find turning points:
+
+```python
+import sys
+sys.path.insert(0, "skills/chess-imbalances/scripts")
+from game_narrative import detect_critical_moments
+
+moments = detect_critical_moments("path/to/game.pgn", depth=18, threshold_cp=50)
+```
+
+- `depth`: Engine search depth per position (default 18; use 12 for quick sweeps).
+- `threshold_cp`: Minimum eval swing in centipawns to flag (default 50; use 80 for only major swings).
+- Returns a list of `CriticalMoment` objects sorted by move number.
+
+### Step 2: Review Critical Moments
+
+Examine the returned moments. For each one, note:
+- The eval swing direction and magnitude
+- The classification (best/excellent/good/inaccuracy/mistake/blunder)
+- The engine's recommended move vs what was played
+- Optionally add a `key_lesson` to each moment that explains the principle violated or demonstrated
+
+### Step 3: Classify the Arc
+
+Based on the pattern of eval swings, classify the game arc:
+
+| Arc Type | Pattern |
+|----------|---------|
+| `gradual_collapse` | Advantage builds slowly through accumulating small errors |
+| `single_blunder` | Position was balanced/close until one catastrophic move |
+| `back_and_forth` | Advantage swings between sides multiple times |
+| `missed_opportunity` | One side had a winning position but failed to convert |
+| `steady_conversion` | One side gained an early edge and methodically increased it |
+
+### Step 4: Synthesize the Narrative
+
+Build a `GameNarrative` model with:
+
+```python
+from game_narrative import GameNarrative, render_game_story
+
+narrative = GameNarrative(
+    game_metadata={"white": "...", "black": "...", "result": "...", "date": "...", "opening": "...", "eco": "..."},
+    critical_moments=moments,  # with key_lesson populated
+    arc_type="gradual_collapse",
+    game_story="...",  # ≥80 chars, the connected story of the game
+    key_lessons=["...", "..."],  # 1-7 transferable chess lessons
+    turning_point_move=11,
+    turning_point_side="white",
+)
+```
+
+- `game_story`: Write a narrative connecting the critical moments into a coherent story. Second person where appropriate.
+- `key_lessons`: Transferable chess principles demonstrated by this game.
+- `turning_point_move` / `turning_point_side`: The single move that most decisively shifted the game's outcome.
+
+### Step 5: Render Output
+
+```python
+md = render_game_story(narrative, output_path=Path("analysis/<filename>-narrative.md"))
+```
+
+Print a console summary after saving:
+
+```
+Saved to: analysis/<filename>-narrative.md
+
+**Arc:** Gradual Collapse
+**Turning Point:** Move 11 (White) — Be2 instead of Bg2
+**Critical Moments:** N flagged across M moves
+**Key Lesson:** [First lesson from the list]
+```
+
+### Combining with Deep Analysis
+
+For a complete game study, combine narrative mode with deep analysis at critical positions:
+
+1. Run `--narrative` to identify critical moments and the overall arc.
+2. Run `--deep` at 2-4 of the most important critical positions (the turning point + key moments before/after).
+3. The Player's Guides from deep analysis become the "critical moment cards" in the app, while the Game Narrative provides the connecting story and eval timeline.
 
 ## Output Format — Default Mode
 

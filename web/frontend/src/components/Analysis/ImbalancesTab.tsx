@@ -213,6 +213,91 @@ function summarizeDevelopment(data: any, phase: string): ImbalanceSummary {
   };
 }
 
+function summarizeSuperiorMinorPiece(data: any, phase: string): ImbalanceSummary {
+  const descSide = (s: any): string => {
+    const parts: string[] = [`${s.bishops}B ${s.knights}N`];
+    if (s.bishop_pair) parts.push("bishop pair");
+    if (s.bad_bishops?.length) parts.push(`bad bishop on ${s.bad_bishops.join(", ")}`);
+    if (s.good_knights?.length) {
+      const gk = s.good_knights.map((g: any) => g.square + (g.pawn_defended ? " (pawn)" : ""));
+      parts.push(`outpost${s.good_knights.length > 1 ? "s" : ""}: ${gk.join(", ")}`);
+    }
+    return parts.join("; ") + ".";
+  };
+
+  const posType = data.position_type || "unknown";
+  let verdict: string;
+  if (data.verdict === "white_better") verdict = "White's minor pieces are superior.";
+  else if (data.verdict === "black_better") verdict = "Black's minor pieces are superior.";
+  else verdict = "Minor pieces are comparable.";
+  verdict += ` Position is ${posType}.`;
+  if (data.engine_assessment) verdict += ` ${data.engine_assessment}`;
+  if (phase === "endgame" && (data.white?.bishop_pair || data.black?.bishop_pair))
+    verdict += " Bishop pair gains value in the endgame.";
+
+  return {
+    title: "Superior Minor Piece",
+    white: descSide(data.white),
+    black: descSide(data.black),
+    verdict,
+  };
+}
+
+function summarizeInitiative(data: any, phase: string): ImbalanceSummary {
+  const descSide = (s: any): string => {
+    const parts: string[] = [];
+    if (s.checks_available) parts.push(`${s.checks_available} check${s.checks_available > 1 ? "s" : ""}`);
+    if (s.threats_count) parts.push(`${s.threats_count} threat${s.threats_count > 1 ? "s" : ""}`);
+    if (s.pins_imposed) parts.push(`${s.pins_imposed} pin${s.pins_imposed > 1 ? "s" : ""} imposed`);
+    if (s.development_lead) parts.push(`+${s.development_lead} dev lead`);
+    if (s.attackers_near_enemy_king) parts.push(`${s.attackers_near_enemy_king} king attacker${s.attackers_near_enemy_king > 1 ? "s" : ""}`);
+    if (parts.length === 0) return "No dynamic pressure.";
+    return parts.join("; ") + `.  Score: ${s.initiative_score}`;
+  };
+
+  let verdict: string;
+  if (data.side_with_initiative === "white") verdict = "White has the initiative.";
+  else if (data.side_with_initiative === "black") verdict = "Black has the initiative.";
+  else verdict = "Initiative is balanced.";
+  if (data.engine_assessment) verdict += ` ${data.engine_assessment}`;
+  if (phase === "opening") verdict += " Initiative is especially valuable in the opening.";
+
+  return {
+    title: "Initiative",
+    white: descSide(data.white),
+    black: descSide(data.black),
+    verdict,
+  };
+}
+
+function summarizeStaticsVsDynamics(data: any, phase: string): ImbalanceSummary {
+  const descSide = (s: any): string => {
+    const parts: string[] = [];
+    if (s.static_advantages?.length)
+      parts.push(`Static +: ${s.static_advantages.join(", ")}`);
+    if (s.static_weaknesses?.length)
+      parts.push(`Static −: ${s.static_weaknesses.join(", ")}`);
+    if (s.dynamic_advantages?.length)
+      parts.push(`Dynamic +: ${s.dynamic_advantages.join(", ")}`);
+    if (s.dynamic_weaknesses?.length)
+      parts.push(`Dynamic −: ${s.dynamic_weaknesses.join(", ")}`);
+    if (parts.length === 0) return "No significant factors.";
+    return parts.join("; ") + ".";
+  };
+
+  let verdict = `Position character: ${data.position_character || "unknown"}. Dominant factor: ${data.dominant_factor || "balanced"}.`;
+  if (data.compensation_detected) verdict += " Compensation detected — dynamic factors offset static weaknesses.";
+  if (data.engine_assessment) verdict += ` ${data.engine_assessment}`;
+  if (phase === "endgame") verdict += " Static advantages tend to dominate in endgames.";
+
+  return {
+    title: "Statics vs Dynamics",
+    white: descSide(data.white),
+    black: descSide(data.black),
+    verdict,
+  };
+}
+
 function ImbalanceRow({ summary }: { summary: ImbalanceSummary }) {
   return (
     <div className="imb-row">
@@ -231,12 +316,21 @@ export function ImbalancesTab({ analysis }: Props) {
 
   const summaries: ImbalanceSummary[] = [
     summarizeMaterial(analysis.material, phase),
+    ...(analysis.superior_minor_piece
+      ? [summarizeSuperiorMinorPiece(analysis.superior_minor_piece, phase)]
+      : []),
     summarizePawnStructure(analysis.pawn_structure, phase),
     summarizePieceActivity(analysis.piece_activity, phase),
     summarizeFiles(analysis.files),
     summarizeKingSafety(analysis.king_safety, phase),
     summarizeSpace(analysis.space, phase),
     summarizeDevelopment(analysis.development, phase),
+    ...(analysis.initiative
+      ? [summarizeInitiative(analysis.initiative, phase)]
+      : []),
+    ...(analysis.statics_vs_dynamics
+      ? [summarizeStaticsVsDynamics(analysis.statics_vs_dynamics, phase)]
+      : []),
   ];
 
   return (

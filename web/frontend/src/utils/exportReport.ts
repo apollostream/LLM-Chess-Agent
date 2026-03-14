@@ -132,7 +132,7 @@ function boardFigure(m: CriticalMoment): string {
  * Build markdown with board images injected for synopsis mode.
  * Inserts board diagram markdown before each critical moment's section.
  */
-function injectBoardMarkdown(md: string, moments: CriticalMoment[]): string {
+export function injectBoardMarkdown(md: string, moments: CriticalMoment[]): string {
   if (moments.length === 0) return md;
 
   // Strategy: split markdown into lines, find paragraphs that first mention

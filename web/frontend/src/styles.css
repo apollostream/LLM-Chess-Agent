@@ -218,6 +218,12 @@ body {
 
 /* ── Controls ──────────────────────────────────────── */
 
+.board-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
 .engine-toggle {
   display: flex;
   align-items: center;

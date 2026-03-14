@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Markdown from "react-markdown";
 import { ChessBoard } from "./components/Board/ChessBoard";
 import { EvalBar } from "./components/Board/EvalBar";
-import { tacticsToShapes } from "./components/Board/arrows";
+import { tacticsToTaggedShapes, filterShapes } from "./components/Board/arrows";
 import { PositionInput } from "./components/Input/PositionInput";
 import { AnalysisPanel } from "./components/Analysis/AnalysisPanel";
 import { MoveList } from "./components/Timeline/MoveList";
+import { injectBoardMarkdown } from "./utils/exportReport";
 import { CriticalMoments, momentKey, topMomentsByMagnitude } from "./components/Timeline/CriticalMoments";
 import { useChessGame } from "./hooks/useChessGame";
 import { useAnalysis } from "./hooks/useAnalysis";
@@ -31,6 +32,9 @@ function App() {
   const [momentsLoading, setMomentsLoading] = useState(false);
   const [momentsError, setMomentsError] = useState<string | null>(null);
   const [selectedMoments, setSelectedMoments] = useState<Set<string>>(new Set());
+
+  const [showWhiteThreats, setShowWhiteThreats] = useState(true);
+  const [showBlackThreats, setShowBlackThreats] = useState(true);
 
   const [sseState, sseActions] = useSSE();
 
@@ -70,7 +74,17 @@ function App() {
   }, [game.fen, sseActions]);
 
   // Determine what to display in Claude output
-  const claudeContent = sseState.data || cachedContent || "";
+  const rawContent = sseState.data || cachedContent || "";
+  const claudeContent = useMemo(() => {
+    if (!rawContent) return "";
+    // For synopsis mode, prepend opening moves and inject board images
+    if (activeMode === "synopsis") {
+      const selected = moments.filter((m) => selectedMoments.has(momentKey(m)));
+      const withPrefix = sseState.prefix ? sseState.prefix + rawContent : rawContent;
+      return selected.length > 0 ? injectBoardMarkdown(withPrefix, selected) : withPrefix;
+    }
+    return rawContent;
+  }, [rawContent, activeMode, moments, selectedMoments, sseState.prefix]);
   const showClaude = claudeContent || sseState.streaming || sseState.error;
 
   useEffect(() => {
@@ -85,9 +99,16 @@ function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [actions]);
 
+  const clearClaudeOutput = useCallback(() => {
+    sseActions.reset();
+    setCachedContent(null);
+    setActiveMode(null);
+    claudeCache.current.clear();
+  }, [sseActions]);
+
   const handleFen = useCallback(
-    (fen: string) => { actions.setFen(fen); setPgnText(null); setMoments([]); setSelectedMoments(new Set()); },
-    [actions],
+    (fen: string) => { actions.setFen(fen); setPgnText(null); setMoments([]); setSelectedMoments(new Set()); clearClaudeOutput(); },
+    [actions, clearClaudeOutput],
   );
 
   const handlePgn = useCallback(
@@ -96,8 +117,9 @@ function App() {
       setPgnText(pgn);
       setMoments([]);
       setSelectedMoments(new Set());
+      clearClaudeOutput();
     },
-    [actions],
+    [actions, clearClaudeOutput],
   );
 
   const handleDetectMoments = useCallback(async () => {
@@ -193,10 +215,15 @@ function App() {
     });
   }, [claudeContent, activeMode, moments, selectedMoments]);
 
-  const shapes = useMemo(() => {
+  const taggedShapes = useMemo(() => {
     if (!analysis?.tactics) return [];
-    return tacticsToShapes(analysis.tactics);
+    return tacticsToTaggedShapes(analysis.tactics);
   }, [analysis]);
+
+  const shapes = useMemo(
+    () => filterShapes(taggedShapes, showWhiteThreats, showBlackThreats),
+    [taggedShapes, showWhiteThreats, showBlackThreats],
+  );
 
   const scoreCp = analysis?.engine?.eval?.score_cp ?? null;
   const mateIn = analysis?.engine?.eval?.mate_in ?? null;
@@ -220,14 +247,32 @@ function App() {
             <ChessBoard fen={game.fen} shapes={shapes} />
           </div>
 
-          <label className="engine-toggle">
-            <input
-              type="checkbox"
-              checked={useEngine}
-              onChange={(e) => setUseEngine(e.target.checked)}
-            />
-            Stockfish evaluation
-          </label>
+          <div className="board-toggles">
+            <label className="engine-toggle">
+              <input
+                type="checkbox"
+                checked={useEngine}
+                onChange={(e) => setUseEngine(e.target.checked)}
+              />
+              Stockfish evaluation
+            </label>
+            <label className="engine-toggle">
+              <input
+                type="checkbox"
+                checked={showWhiteThreats}
+                onChange={(e) => setShowWhiteThreats(e.target.checked)}
+              />
+              White threats
+            </label>
+            <label className="engine-toggle">
+              <input
+                type="checkbox"
+                checked={showBlackThreats}
+                onChange={(e) => setShowBlackThreats(e.target.checked)}
+              />
+              Black threats
+            </label>
+          </div>
 
           {game.hasGame && (
             <div>

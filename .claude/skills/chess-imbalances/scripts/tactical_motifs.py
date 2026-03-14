@@ -426,15 +426,33 @@ def detect_weak_back_rank(board: chess.Board) -> dict:
             is_weak = False
 
         escape_squares = []
+        safe_escapes = []
+        enemy = not color
         for f in shield_files:
             front_sq = chess.square(f, front_rank)
             p = board.piece_at(front_sq)
             if not p or p.color != color or p.piece_type != chess.PAWN:
-                escape_squares.append(chess.square_name(front_sq))
+                sq_name = chess.square_name(front_sq)
+                escape_squares.append(sq_name)
+                # Check if the square is safe (not attacked by opponent,
+                # not occupied by own piece that blocks escape)
+                occupied_by_own = p and p.color == color
+                attacked_by_enemy = board.is_attacked_by(enemy, front_sq)
+                if not attacked_by_enemy and not occupied_by_own:
+                    safe_escapes.append(sq_name)
+
+        # Back rank is weak if all shield squares are blocked AND
+        # there are no safe escape squares
+        if is_weak and not safe_escapes and not rook_defends:
+            is_weak = True
+        elif not is_weak and escape_squares and not safe_escapes and not rook_defends:
+            # Escape squares exist but are all attacked — still weak
+            is_weak = True
 
         result[_side_name(color)] = {
             "is_weak": is_weak,
             "escape_squares": escape_squares,
+            "safe_escapes": safe_escapes,
             "rook_defends_back_rank": rook_defends,
         }
 
@@ -645,6 +663,7 @@ def detect_forks(board: chess.Board) -> list[dict]:
                     "move": board.peek().uci() if board.move_stack else move.uci(),
                     "move_san": None,  # filled below
                     "forking_piece": PIECE_NAMES[moving_piece.piece_type],
+                    "landing_square": chess.square_name(to_sq),
                     "targets": [t["piece"] for t in targets],
                     "side": _side_name(stm),
                 })
@@ -705,6 +724,7 @@ def detect_skewers(board: chess.Board) -> list[dict]:
                         san = move.uci()
                     skewers.append({
                         "move": san,
+                        "move_to": chess.square_name(to_sq),
                         "skewering_piece": PIECE_NAMES[moved_piece.piece_type],
                         "front_target": _piece_desc(board, sq_a),
                         "rear_target": _piece_desc(board, sq_b),
@@ -868,6 +888,8 @@ def detect_back_rank_mates(board: chess.Board) -> list[dict]:
                         san = move.uci()
                     mates.append({
                         "move": san,
+                        "attacking_piece": _piece_desc(board, move.from_square),
+                        "mate_square": chess.square_name(move.to_square),
                         "side": _side_name(stm),
                     })
                     continue
@@ -1190,6 +1212,24 @@ def detect_smothered_mates(board: chess.Board) -> list[dict]:
 
 # ── Entry point ──────────────────────────────────────────────────────────────
 
+def _detect_opponent_threats(board: chess.Board) -> dict:
+    """Detect threats the opponent would have if it were their turn.
+
+    Flips the side to move and runs key threat detectors to surface
+    what the opponent is threatening (e.g. back rank mate, forks).
+    """
+    # Create a copy with the turn flipped
+    opp_board = board.copy()
+    opp_board.turn = not board.turn
+
+    return {
+        "back_rank_mates": detect_back_rank_mates(opp_board),
+        "forks": detect_forks(opp_board),
+        "discovered_attacks": detect_discovered_attacks(opp_board),
+        "discovered_checks": detect_discovered_checks(opp_board),
+    }
+
+
 def analyze_tactics(board: chess.Board) -> dict:
     """Run all tactical motif detectors and return the full nested structure."""
     return {
@@ -1213,6 +1253,7 @@ def analyze_tactics(board: chess.Board) -> dict:
             "back_rank_mates": detect_back_rank_mates(board),
             "removal_of_guard": detect_removal_of_guard(board),
         },
+        "opponent_threats": _detect_opponent_threats(board),
         "sequences": {
             "deflections": detect_deflections(board),
             "zwischenzug": detect_zwischenzug(board),

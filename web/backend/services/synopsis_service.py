@@ -119,6 +119,13 @@ async def stream_synopsis(
     # --- Phase 3: Synthesis (streaming to user) ---
     yield _sse({"type": "progress", "phase": "synthesis", "current": 0, "total": 1})
 
+    # Stream opening moves prefix before Claude's synthesis
+    first_move = min(m["move_number"] for m in moments) if moments else 10
+    opening_moves = _extract_opening_moves(pgn, first_move - 1)
+    if opening_moves:
+        prefix = f"> **Opening moves:** {opening_moves}\n\n"
+        yield _sse({"type": "opening_moves", "content": prefix})
+
     # Build guides block
     guide_sections = []
     for m, guide_text in zip(moments, guides):
@@ -152,6 +159,39 @@ async def stream_synopsis(
         yield chunk
 
 
+def build_opening_prefix(pgn: str, moments: list[dict]) -> str:
+    """Build the opening moves blockquote to prepend to the synopsis."""
+    first_move = min(m["move_number"] for m in moments) if moments else 10
+    opening_moves = _extract_opening_moves(pgn, first_move - 1)
+    if opening_moves:
+        return f"> **Opening moves:** {opening_moves}\n\n"
+    return ""
+
+
+def build_synopsis_appendix(pgn: str) -> str:
+    """Build the appendix markdown (final board + PGN) for the app display.
+
+    Board images use API URLs so they render in the browser.
+    """
+    parts: list[str] = []
+
+    # Final position board
+    final_fen = _get_final_position_fen(pgn)
+    if final_fen:
+        parts.append("\n\n---\n\n### Final Position\n")
+        parts.append(_board_img_api(final_fen, "Final position"))
+
+    # Full PGN move list
+    full_movelist = _extract_full_movelist(pgn)
+    if full_movelist:
+        headers = _extract_game_headers(pgn)
+        result = headers.get("Result", "*")
+        parts.append("\n\n---\n\n### Complete Game\n")
+        parts.append(f"\n```\n{full_movelist} {result}\n```")
+
+    return "".join(parts)
+
+
 def _slugify(text: str) -> str:
     """Convert text to a filename-safe slug."""
     text = text.lower().strip()
@@ -170,14 +210,175 @@ def _extract_players(pgn: str) -> tuple[str, str]:
     return (white, black)
 
 
+def _extract_opening_moves(pgn: str, up_to_move: int) -> str:
+    """Extract the opening move list from PGN up to the given move number.
+
+    Returns a compact move string like '1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5'.
+    """
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    if game is None:
+        return ""
+
+    parts: list[str] = []
+    node = game
+    while node.variations:
+        node = node.variations[0]
+        board = node.board()
+        move_num = board.fullmove_number
+        # node.move is the move that led to this position
+        if board.turn == chess.BLACK:
+            # White just moved → fullmove_number is the current move
+            if move_num > up_to_move:
+                break
+            san = node.parent.board().san(node.move)
+            parts.append(f"{move_num}.{san}")
+        else:
+            # Black just moved → fullmove_number is next move
+            if move_num - 1 > up_to_move:
+                break
+            san = node.parent.board().san(node.move)
+            parts.append(san)
+
+    return " ".join(parts)
+
+
+def _extract_full_movelist(pgn: str) -> str:
+    """Extract the full move list from PGN in standard notation."""
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    if game is None:
+        return ""
+
+    exporter = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
+    return game.accept(exporter).strip()
+
+
+def _get_final_position_fen(pgn: str) -> str | None:
+    """Get the FEN of the final position in the game."""
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    if game is None:
+        return None
+    return game.end().board().fen()
+
+
+def _extract_game_headers(pgn: str) -> dict[str, str]:
+    """Extract key PGN headers."""
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    if game is None:
+        return {}
+    return dict(game.headers)
+
+
+def _board_img_api(fen: str, label: str, classification: str = "") -> str:
+    """Markdown image tag using the board SVG API endpoint."""
+    encoded = fen.replace(" ", "%20")
+    alt = f"Before {label}"
+    if classification:
+        alt += f" ({classification})"
+    return f"![{alt}](/api/v1/board.svg?fen={encoded}&size=360)"
+
+
+def _enrich_synopsis(
+    synopsis_text: str,
+    moments: list[dict],
+    pgn: str,
+    *,
+    img_fn: callable,
+    final_img_fn: callable | None = None,
+) -> list[str]:
+    """Core enrichment logic: insert opening moves, board images, final board, PGN.
+
+    img_fn(moment, label, classification) -> markdown image string
+    final_img_fn(fen) -> markdown image string (or None to skip)
+    """
+    # Determine the first critical moment's move number for opening moves
+    first_moment_move = min(m["move_number"] for m in moments) if moments else 10
+    opening_moves = _extract_opening_moves(pgn, first_moment_move - 1)
+
+    # Extract game headers for result line
+    headers = _extract_game_headers(pgn)
+    result = headers.get("Result", "*")
+
+    # Build board refs with labels
+    board_refs = []
+    for m in moments:
+        dots = "..." if m["side"] == "black" else "."
+        label = f"{m['move_number']}{dots}{m['san']}"
+        board_refs.append((m, label, m.get("classification", "")))
+
+    lines = synopsis_text.split("\n")
+    result_lines: list[str] = []
+    pending = list(board_refs)
+    opening_inserted = False
+
+    for i, line in enumerate(lines):
+        # Insert opening moves before the first narrative paragraph
+        if (not opening_inserted and line.strip()
+                and not line.startswith("#") and not line.startswith("---")
+                and not line.startswith("**")):
+            if opening_moves:
+                result_lines.append(f"> **Opening moves:** {opening_moves}")
+                result_lines.append("")
+            opening_inserted = True
+
+        result_lines.append(line)
+        # At paragraph boundaries, inject board diagram
+        next_blank = i + 1 >= len(lines) or lines[i + 1].strip() == ""
+        if next_blank and line.strip() and pending:
+            for j, (m, label, classification) in enumerate(pending):
+                move_num = m["move_number"]
+                side = m["side"]
+                dots_re = r"\.\.\." if side == "black" else r"\."
+                pat = re.compile(rf"\b{move_num}{dots_re}|[Mm]ove\s+{move_num}\b")
+                if pat.search(line):
+                    result_lines.append("")
+                    result_lines.append(img_fn(m, label, classification))
+                    pending.pop(j)
+                    break
+
+    # Unmatched boards at the end
+    for m, label, classification in pending:
+        result_lines.append("")
+        result_lines.append(img_fn(m, label, classification))
+
+    # Final position board
+    final_fen = _get_final_position_fen(pgn)
+    if final_fen and final_img_fn:
+        result_lines.append("")
+        result_lines.append("---")
+        result_lines.append("")
+        result_lines.append("### Final Position")
+        result_lines.append("")
+        result_lines.append(final_img_fn(final_fen))
+
+    # Full PGN move list
+    full_movelist = _extract_full_movelist(pgn)
+    if full_movelist:
+        result_lines.append("")
+        result_lines.append("---")
+        result_lines.append("")
+        result_lines.append("### Complete Game")
+        result_lines.append("")
+        result_lines.append("```")
+        result_lines.append(f"{full_movelist} {result}")
+        result_lines.append("```")
+
+    return result_lines
+
+
 def save_synopsis(
     synopsis_text: str,
     moments: list[dict],
     pgn: str,
-) -> Path:
+) -> str:
     """Save synopsis markdown and board SVGs to the analysis directory.
 
-    Returns the path to the saved markdown file.
+    Adds three programmatic elements:
+    1. Opening moves before the first narrative paragraph
+    2. Final position board SVG after the synopsis text
+    3. Full PGN move list appended at the end
+
+    Returns the enriched markdown for the app (with API image URLs).
+    Also saves a disk version (with local SVG file paths).
     """
     ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -186,49 +387,56 @@ def save_synopsis(
     slug = _slugify(f"{white}-vs-{black}-synopsis")
     base_name = f"{today}_{slug}"
 
-    # Generate board SVGs for each critical moment
-    board_refs: list[str] = []
+    # Generate board SVGs for each critical moment and build name map
+    svg_names: dict[str, str] = {}  # "move_num+side_char" -> svg filename
     for m in moments:
         fen = m["fen_before"]
         board = chess.Board(fen)
         svg = chess.svg.board(board, size=400)
 
         side_char = m["side"][0]
-        svg_name = f"{base_name}_move{m['move_number']}{side_char}.svg"
-        svg_path = ANALYSIS_DIR / svg_name
-        svg_path.write_text(svg)
+        key = f"{m['move_number']}{side_char}"
+        svg_name = f"{base_name}_move{key}.svg"
+        (ANALYSIS_DIR / svg_name).write_text(svg)
+        svg_names[key] = svg_name
 
-        dots = "..." if m["side"] == "black" else "."
-        label = f"{m['move_number']}{dots}{m['san']}"
-        board_refs.append((m["move_number"], m["side"], svg_name, label, m.get("classification", "")))
+    # Generate final position board SVG
+    final_fen = _get_final_position_fen(pgn)
+    final_svg_name = None
+    if final_fen:
+        final_board = chess.Board(final_fen)
+        final_svg = chess.svg.board(final_board, size=400)
+        final_svg_name = f"{base_name}_final.svg"
+        (ANALYSIS_DIR / final_svg_name).write_text(final_svg)
 
-    # Inject board image references into the synopsis markdown
-    lines = synopsis_text.split("\n")
-    result_lines: list[str] = []
-    pending = list(board_refs)
+    # --- Disk version (local SVG paths) ---
+    def disk_img(m: dict, label: str, classification: str) -> str:
+        key = f"{m['move_number']}{m['side'][0]}"
+        name = svg_names.get(key, "")
+        alt = f"Before {label} ({classification})" if classification else f"Before {label}"
+        return f"![{alt}]({name})"
 
-    for i, line in enumerate(lines):
-        result_lines.append(line)
-        # At paragraph boundaries, check if this paragraph mentions a pending moment
-        next_blank = i + 1 >= len(lines) or lines[i + 1].strip() == ""
-        if next_blank and line.strip() and pending:
-            for j, (move_num, side, svg_name, label, classification) in enumerate(pending):
-                dots_re = r"\.\.\." if side == "black" else r"\."
-                pat = re.compile(rf"\b{move_num}{dots_re}|[Mm]ove\s+{move_num}\b")
-                if pat.search(line):
-                    result_lines.append("")
-                    result_lines.append(f"![Before {label} ({classification})]({svg_name})")
-                    pending.pop(j)
-                    break
+    def disk_final_img(fen: str) -> str:
+        return f"![Final position]({final_svg_name})" if final_svg_name else ""
 
-    # Append any unmatched boards at the end
-    for move_num, side, svg_name, label, classification in pending:
-        result_lines.append("")
-        result_lines.append(f"![Before {label} ({classification})]({svg_name})")
-
-    final_md = "\n".join(result_lines)
-
+    disk_lines = _enrich_synopsis(
+        synopsis_text, moments, pgn,
+        img_fn=disk_img, final_img_fn=disk_final_img,
+    )
+    disk_md = "\n".join(disk_lines)
     md_path = ANALYSIS_DIR / f"{base_name}.md"
-    md_path.write_text(final_md)
+    md_path.write_text(disk_md)
 
-    return md_path
+    # --- App version (API image URLs) ---
+    def api_img(m: dict, label: str, classification: str) -> str:
+        return _board_img_api(m["fen_before"], label, classification)
+
+    def api_final_img(fen: str) -> str:
+        return _board_img_api(fen, "Final position")
+
+    app_lines = _enrich_synopsis(
+        synopsis_text, moments, pgn,
+        img_fn=api_img, final_img_fn=api_final_img,
+    )
+
+    return "\n".join(app_lines)

@@ -10,6 +10,7 @@ interface ProgressInfo {
 
 interface SSEState {
   data: string;
+  prefix: string;
   streaming: boolean;
   error: string | null;
   progress: ProgressInfo | null;
@@ -23,6 +24,7 @@ interface SSEActions {
 
 export function useSSE(): [SSEState, SSEActions] {
   const [data, setData] = useState("");
+  const [prefix, setPrefix] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
@@ -38,6 +40,7 @@ export function useSSE(): [SSEState, SSEActions] {
   const reset = useCallback(() => {
     stop();
     setData("");
+    setPrefix("");
     setError(null);
   }, [stop]);
 
@@ -45,6 +48,7 @@ export function useSSE(): [SSEState, SSEActions] {
     async (url: string, body: unknown) => {
       stop();
       setData("");
+      setPrefix("");
       setError(null);
       setProgress(null);
       setStreaming(true);
@@ -66,31 +70,38 @@ export function useSSE(): [SSEState, SSEActions] {
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const text = decoder.decode(value, { stream: true });
-          // Parse SSE lines
-          for (const line of text.split("\n")) {
-            if (line.startsWith("data: ")) {
-              const payload = line.slice(6);
-              if (payload === "[DONE]") continue;
-              try {
-                const event = JSON.parse(payload);
-                if (event.type === "text") {
-                  setData((prev) => prev + event.content);
-                } else if (event.type === "progress") {
-                  setProgress({
-                    phase: event.phase,
-                    current: event.current,
-                    total: event.total,
-                  });
+          buffer += decoder.decode(value, { stream: true });
+          // Process complete SSE messages (terminated by double newline)
+          const messages = buffer.split("\n\n");
+          buffer = messages.pop() ?? ""; // last element may be incomplete
+
+          for (const msg of messages) {
+            for (const line of msg.split("\n")) {
+              if (line.startsWith("data: ")) {
+                const payload = line.slice(6);
+                if (payload === "[DONE]") continue;
+                try {
+                  const event = JSON.parse(payload);
+                  if (event.type === "text") {
+                    setData((prev) => prev + event.content);
+                  } else if (event.type === "opening_moves") {
+                    setPrefix(event.content);
+                  } else if (event.type === "progress") {
+                    setProgress({
+                      phase: event.phase,
+                      current: event.current,
+                      total: event.total,
+                    });
+                  }
+                } catch {
+                  // Not JSON — skip malformed payloads
                 }
-              } catch {
-                // Not JSON, treat as raw text
-                setData((prev) => prev + payload);
               }
             }
           }
@@ -108,5 +119,5 @@ export function useSSE(): [SSEState, SSEActions] {
     [stop],
   );
 
-  return [{ data, streaming, error, progress }, { start, stop, reset }];
+  return [{ data, prefix, streaming, error, progress }, { start, stop, reset }];
 }

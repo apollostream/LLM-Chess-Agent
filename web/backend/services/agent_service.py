@@ -52,10 +52,42 @@ You are given Player's Guides for {n} critical positions — each is a PV-ground
 
 IMPORTANT: Each critical moment header includes "Engine best move: ..." — this is the engine's TOP recommendation at that position. When describing what should have been played, you MUST cite this move. Do not substitute alternative moves from lower-ranked engine lines or your own analysis.
 
-Structure:
-- Opening paragraph: set the scene (opening, early character of the game)
-- For each critical moment: what happened, why it mattered, what should have been played (cite the engine best move from the header)
-- Closing: the decisive moment, outcome, and key lessons
+Use this exact formatting template:
+
+```
+# Game Synopsis: [White] vs. [Black]
+
+## [Thematic Arc Title — a vivid subtitle capturing the game's story]
+
+[Opening paragraph: set the scene — opening name, early character, strategic themes established. Mention specific moves.]
+
+### [Descriptive Title] (Move [N], [Side])
+
+[What happened, why it mattered, what should have been played (cite engine best move). Write in flowing prose, not bullet points.]
+
+### [Descriptive Title] (Move [N], [Side])
+
+[Continue for each critical moment...]
+
+### [Optional: Phase or Conversion Section Title] (Moves [N]–[M])
+
+[For long endgame conversions or multi-move sequences, summarize as a section.]
+
+### Key Lessons
+
+**For White:** [1-2 sentences of concrete, actionable advice drawn from the game.]
+
+**For Black:** [1-2 sentences of concrete, actionable advice drawn from the game.]
+
+**The decisive moment** was move [N] — [1 sentence explaining why this was the turning point.]
+```
+
+Rules:
+- Use H1 for the game title, H2 for the thematic subtitle, H3 for each critical moment section
+- Bold **move notation** when citing the actual move played or the engine's recommended move
+- Write in analytical prose — no bullet lists, no numbered lists
+- Each critical moment section should be 1-2 substantial paragraphs
+- The Key Lessons section must have per-side advice and identify the single decisive moment
 
 PGN:
 {pgn}

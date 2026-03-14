@@ -16,7 +16,7 @@ export function useAnalysis(fen: string): UseAnalysisResult {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useEngine, setUseEngine] = useState(false);
+  const [useEngine, setUseEngine] = useState(true);
   const cache = useRef(new Map<string, AnalysisResult>());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 

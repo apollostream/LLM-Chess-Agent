@@ -107,7 +107,9 @@ async def agent_synopsis(req: SynopsisRequest):
         )
 
     async def _caching_synopsis() -> AsyncIterator[str]:
-        from services.synopsis_service import save_synopsis
+        from services.synopsis_service import (
+            save_synopsis, build_synopsis_appendix,
+        )
 
         accumulated: list[str] = []
         async for chunk in stream_synopsis(
@@ -127,10 +129,18 @@ async def agent_synopsis(req: SynopsisRequest):
             yield chunk
 
         if accumulated:
-            text = "".join(accumulated)
-            agent_cache.put(*cache_parts, value=text)
-            # Save to analysis/ directory with board SVGs
-            save_synopsis(text, req.moments, req.pgn)
+            raw_text = "".join(accumulated)
+            # Save enriched version to disk (with local SVG paths)
+            save_synopsis(raw_text, req.moments, req.pgn)
+            # Build appendix for the app (final board + PGN)
+            appendix = build_synopsis_appendix(req.pgn)
+            if appendix:
+                yield f"data: {json.dumps({'type': 'text', 'content': appendix})}\n\n"
+            # Build opening moves prefix
+            from services.synopsis_service import build_opening_prefix
+            prefix = build_opening_prefix(req.pgn, req.moments)
+            # Cache prefix + raw text + appendix (images injected client-side)
+            agent_cache.put(*cache_parts, value=prefix + raw_text + appendix)
 
     return StreamingResponse(
         _caching_synopsis(),

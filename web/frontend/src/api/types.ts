@@ -69,6 +69,7 @@ export interface TacticsResult {
   static: Record<string, unknown[]>;
   threats: Record<string, unknown[]>;
   sequences: Record<string, unknown[]>;
+  opponent_threats?: Record<string, unknown[]>;
 }
 
 /** Full analysis result from /analyze endpoint. */
@@ -91,6 +92,9 @@ export interface AnalysisResult {
   is_check: boolean;
   is_checkmate: boolean;
   is_stalemate: boolean;
+  superior_minor_piece?: Record<string, unknown>;
+  initiative?: Record<string, unknown>;
+  statics_vs_dynamics?: Record<string, unknown>;
   engine?: {
     available: boolean;
     eval: EngineEval | null;

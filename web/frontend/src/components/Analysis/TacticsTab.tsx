@@ -163,6 +163,13 @@ const SEQUENCE_MOTIFS: Record<string, MotifConfig> = {
   smothered_mates: { label: "Smothered Mates", icon: "♞", summarize: describeSmotheredMate },
 };
 
+const OPPONENT_THREAT_MOTIFS: Record<string, MotifConfig> = {
+  back_rank_mates: { label: "Back Rank Mate Threats", icon: "💀", summarize: describeBackRankMate },
+  forks: { label: "Fork Threats", icon: "🍴", summarize: describeFork },
+  discovered_attacks: { label: "Discovered Attack Threats", icon: "💥", summarize: describeDiscoveredAttack },
+  discovered_checks: { label: "Discovered Check Threats", icon: "⚡", summarize: describeDiscoveredCheck },
+};
+
 // ── Components ─────────────────────────────────────────────────────────────
 
 function MotifSection({ data, config }: { data: any; config: MotifConfig }) {
@@ -228,7 +235,7 @@ function TierBlock({ title, tier, motifs }: {
 }
 
 export function TacticsTab({ tactics }: { tactics: TacticsResult }) {
-  const hasAny = [tactics.static, tactics.threats, tactics.sequences].some(
+  const hasAny = [tactics.static, tactics.threats, tactics.sequences, tactics.opponent_threats].some(
     (tier) => tier && Object.values(tier).some((v) => {
       if (Array.isArray(v)) return v.length > 0;
       if (typeof v === "object" && v !== null) return Object.values(v).some((s: any) => s?.is_weak);
@@ -245,6 +252,9 @@ export function TacticsTab({ tactics }: { tactics: TacticsResult }) {
       <TierBlock title="Static Patterns" tier={tactics.static as Record<string, any>} motifs={STATIC_MOTIFS} />
       <TierBlock title="Single-Move Threats" tier={tactics.threats as Record<string, any>} motifs={THREAT_MOTIFS} />
       <TierBlock title="Forced Sequences" tier={tactics.sequences as Record<string, any>} motifs={SEQUENCE_MOTIFS} />
+      {tactics.opponent_threats && (
+        <TierBlock title="Opponent Threats" tier={tactics.opponent_threats as Record<string, any>} motifs={OPPONENT_THREAT_MOTIFS} />
+      )}
     </div>
   );
 }

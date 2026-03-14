@@ -686,3 +686,49 @@ class TestAnalyzeTactics:
         tactical_motifs.analyze_tactics(board)
         elapsed = time.time() - start
         assert elapsed < 1.0, f"Tactical analysis took {elapsed:.2f}s, expected < 1s"
+
+    def test_opponent_threats_key_exists(self):
+        """analyze_tactics should include opponent_threats at the top level."""
+        board = chess.Board()
+        result = tactical_motifs.analyze_tactics(board)
+        assert "opponent_threats" in result
+        assert "back_rank_mates" in result["opponent_threats"]
+        assert "forks" in result["opponent_threats"]
+
+    def test_opponent_back_rank_mate_detected(self):
+        """After 27. Re1 in Olga-BOT game, White threatens Re8# — should appear in opponent_threats."""
+        # Black to move. White has Re1 threatening Re8#.
+        fen = "6k1/1p3p1p/p1p2bpP/2P5/3r4/5KP1/PP3P2/4R3 b - - 1 27"
+        board = board_from_fen(fen)
+        result = tactical_motifs.analyze_tactics(board)
+        opp_brm = result["opponent_threats"]["back_rank_mates"]
+        assert len(opp_brm) >= 1
+        assert any("Re8" in m.get("move", "") for m in opp_brm)
+
+
+class TestWeakBackRankEscapeSquareSafety:
+    """Test that weak back rank detection checks if escape squares are actually safe."""
+
+    def test_escape_square_controlled_by_enemy(self):
+        """g7 looks open but White's h6 pawn controls it — back rank IS weak."""
+        # Olga-BOT position: Black Kg8, pawns f7/g6/h7, White pawn h6 controls g7
+        fen = "6k1/1p3p1p/p1p2bpP/2P5/3r4/5KP1/PP3P2/4R3 b - - 1 27"
+        board = board_from_fen(fen)
+        result = tactical_motifs.detect_weak_back_rank(board)
+        assert result["black"]["is_weak"] is True
+
+    def test_escape_square_genuinely_safe(self):
+        """g7 is empty and not controlled by enemy — back rank is not weak."""
+        # Standard castled position: Kg8, Pf7/Pg7/Ph7. g6 not pushed so 7th rank is all pawns.
+        fen = "6k1/5ppp/8/8/8/8/PPP2PPP/6K1 b - - 0 1"
+        board = board_from_fen(fen)
+        result = tactical_motifs.detect_weak_back_rank(board)
+        # All three shield squares are blocked by own pawns, so is_weak is True
+        assert result["black"]["is_weak"] is True
+
+    def test_back_rank_with_rook_defender(self):
+        """Rook on back rank should mitigate weakness even if pawns block."""
+        fen = "3r2k1/5ppp/8/8/8/8/PPP2PPP/6K1 b - - 0 1"
+        board = board_from_fen(fen)
+        result = tactical_motifs.detect_weak_back_rank(board)
+        assert result["black"]["is_weak"] is False

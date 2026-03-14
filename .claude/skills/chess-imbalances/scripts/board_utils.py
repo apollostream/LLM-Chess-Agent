@@ -681,6 +681,362 @@ def board_display(board: chess.Board) -> str:
     return board.unicode(borders=True, empty_square="·")
 
 
+# ── Superior Minor Piece ──────────────────────────────────────────────────────
+
+def analyze_superior_minor_piece(board: chess.Board, material: dict,
+                                  piece_activity: dict, pawn_structure: dict,
+                                  files: dict, game_phase: dict,
+                                  engine: dict | None = None) -> dict:
+    """Assess minor piece quality: bishop pair, bad bishops, knight outposts."""
+    total_pawns = (pawn_structure["white"]["pawn_count"]
+                   + pawn_structure["black"]["pawn_count"])
+    open_file_count = len(files["open"])
+
+    if open_file_count >= 3 or total_pawns <= 10:
+        position_type = "open"
+    elif open_file_count <= 1 and total_pawns >= 14:
+        position_type = "closed"
+    else:
+        position_type = "semi-open"
+
+    phase = game_phase["phase"]
+    sides = {}
+    for color_name, color in [("white", chess.WHITE), ("black", chess.BLACK)]:
+        bishops = list(board.pieces(chess.BISHOP, color))
+        knights = list(board.pieces(chess.KNIGHT, color))
+        has_pair = material[color_name]["bishop_pair"]
+
+        # Bad bishops: own pawns on same color complex
+        own_pawns = board.pieces(chess.PAWN, color)
+        bad_bishops = []
+        for bsq in bishops:
+            bishop_light = (chess.square_rank(bsq) + chess.square_file(bsq)) % 2
+            same_color_pawns = sum(
+                1 for p in own_pawns
+                if (chess.square_rank(p) + chess.square_file(p)) % 2 == bishop_light
+            )
+            total_own = len(own_pawns)
+            if total_own > 0 and same_color_pawns / total_own > 0.5:
+                bad_bishops.append(chess.square_name(bsq))
+
+        # Good knights: reuse outpost data from piece_activity
+        outposts = piece_activity[color_name]["knight_outposts"]
+        good_knights = [
+            {"square": o["square"], "pawn_defended": o["pawn_defended"]}
+            for o in outposts
+        ]
+
+        # Score
+        score = 0
+        if has_pair:
+            score += {"open": 2, "semi-open": 1, "closed": 0}[position_type]
+            if phase in ("early_endgame", "endgame"):
+                score += 1
+        score -= len(bad_bishops)
+        for gk in good_knights:
+            if gk["pawn_defended"]:
+                score += {"open": 0, "semi-open": 1, "closed": 2}[position_type]
+            else:
+                score += {"open": 0, "semi-open": 0, "closed": 1}[position_type]
+
+        sides[color_name] = {
+            "bishops": len(bishops),
+            "knights": len(knights),
+            "bishop_pair": has_pair,
+            "bad_bishops": bad_bishops,
+            "good_knights": good_knights,
+            "minor_piece_score": score,
+        }
+
+    # Verdict
+    diff = sides["white"]["minor_piece_score"] - sides["black"]["minor_piece_score"]
+    if diff > 0:
+        verdict = "white_better"
+    elif diff < 0:
+        verdict = "black_better"
+    else:
+        verdict = "equal"
+
+    # Engine assessment
+    engine_assessment = None
+    if engine and engine.get("available") and engine.get("eval"):
+        ev = engine["eval"]
+        score_cp = ev.get("score_cp")
+        if score_cp is not None:
+            direction = "White" if score_cp > 0 else "Black"
+            agrees = (score_cp > 0 and verdict == "white_better") or \
+                     (score_cp < 0 and verdict == "black_better")
+            sign = "+" if score_cp >= 0 else ""
+            if verdict != "equal":
+                if agrees:
+                    engine_assessment = f"Engine confirms {direction}'s minor pieces are superior ({sign}{score_cp / 100:.2f})."
+                else:
+                    engine_assessment = f"Engine eval ({sign}{score_cp / 100:.2f}) suggests other factors outweigh minor piece assessment."
+
+    return {
+        "white": sides["white"],
+        "black": sides["black"],
+        "position_type": position_type,
+        "verdict": verdict,
+        "engine_assessment": engine_assessment,
+    }
+
+
+# ── Initiative ───────────────────────────────────────────────────────────────
+
+def analyze_initiative(board: chess.Board, development: dict,
+                       king_safety: dict, tactics: dict, pins: list,
+                       piece_activity: dict,
+                       engine: dict | None = None) -> dict:
+    """Assess which side has the initiative: checks, captures, threats, pins."""
+    sides = {}
+    side_to_move = chess.WHITE if board.turn == chess.WHITE else chess.BLACK
+
+    for color_name, color in [("white", chess.WHITE), ("black", chess.BLACK)]:
+        opponent_name = "black" if color == chess.WHITE else "white"
+        checks = 0
+        captures = 0
+
+        if color == side_to_move:
+            for move in board.legal_moves:
+                if board.gives_check(move):
+                    checks += 1
+                if board.is_capture(move):
+                    captures += 1
+        else:
+            # Approximate from tactics threats for the non-moving side
+            threats = tactics.get("threats", {})
+            for key in threats:
+                for t in threats[key]:
+                    if isinstance(t, dict) and t.get("side") == color_name:
+                        captures += 1
+
+        # Threats count from tactics
+        threat_count = 0
+        for category in ("threats", "static"):
+            section = tactics.get(category, {})
+            for key in section:
+                items = section[key]
+                if isinstance(items, list):
+                    for t in items:
+                        if isinstance(t, dict) and t.get("side") == color_name:
+                            threat_count += 1
+
+        # Pins imposed (pinned_side is opponent)
+        pins_imposed = sum(
+            1 for p in pins if p.get("pinned_side") == opponent_name
+        )
+
+        # Development lead
+        dev_self = development[color_name]["development_count"]
+        dev_opp = development[opponent_name]["development_count"]
+        dev_lead = max(0, dev_self - dev_opp)
+
+        # Attackers near enemy king
+        attackers_near_king = len(
+            king_safety[opponent_name].get("nearby_attackers", [])
+        )
+
+        # Score: +2 per check, +1 per threat, +1 per pin, +1 per dev lead (cap 3),
+        #        +1 per attacker near enemy king
+        score = (checks * 2 + threat_count + pins_imposed
+                 + min(dev_lead, 3) + attackers_near_king)
+
+        sides[color_name] = {
+            "checks_available": checks,
+            "captures_available": captures,
+            "threats_count": threat_count,
+            "pins_imposed": pins_imposed,
+            "development_lead": dev_lead,
+            "attackers_near_enemy_king": attackers_near_king,
+            "initiative_score": score,
+        }
+
+    # Determine side with initiative
+    w_score = sides["white"]["initiative_score"]
+    b_score = sides["black"]["initiative_score"]
+    diff = w_score - b_score
+    if diff >= 3:
+        side_with = "white"
+    elif diff <= -3:
+        side_with = "black"
+    else:
+        side_with = "balanced"
+
+    # Engine assessment
+    engine_assessment = None
+    if engine and engine.get("available") and engine.get("eval"):
+        ev = engine["eval"]
+        score_cp = ev.get("score_cp")
+        wdl = ev.get("wdl")
+        pv = ev.get("pv", [])
+        if wdl and (wdl.get("win", 0) > 700 or wdl.get("loss", 0) > 700):
+            dominant = "White" if wdl.get("win", 0) > 700 else "Black"
+            pv_excerpt = " ".join(pv[:5]) if pv else ""
+            engine_assessment = f"Engine's PV shows {dominant} maintaining pressure"
+            if pv_excerpt:
+                sign = "+" if (score_cp or 0) >= 0 else ""
+                engine_assessment += f": {pv_excerpt} ({sign}{(score_cp or 0) / 100:.2f})."
+            else:
+                engine_assessment += "."
+
+    return {
+        "white": sides["white"],
+        "black": sides["black"],
+        "side_with_initiative": side_with,
+        "engine_assessment": engine_assessment,
+    }
+
+
+# ── Statics vs Dynamics ─────────────────────────────────────────────────────
+
+def analyze_statics_vs_dynamics(board: chess.Board, result: dict,
+                                 engine: dict | None = None) -> dict:
+    """Classify static vs dynamic advantages for both sides."""
+    game_phase = result["game_phase"]
+    pawn_structure = result["pawn_structure"]
+    material = result["material"]
+    files = result["files"]
+    king_safety = result["king_safety"]
+    development = result["development"]
+    initiative = result["initiative"]
+    smp = result["superior_minor_piece"]
+
+    total_pawns = (pawn_structure["white"]["pawn_count"]
+                   + pawn_structure["black"]["pawn_count"])
+    open_file_count = len(files["open"])
+    total_threats = (initiative["white"]["threats_count"]
+                     + initiative["black"]["threats_count"])
+
+    sides = {}
+    for color_name in ["white", "black"]:
+        static_adv = []
+        static_weak = []
+        dynamic_adv = []
+        dynamic_weak = []
+        opponent_name = "black" if color_name == "white" else "white"
+
+        # Static advantages
+        if material[color_name]["bishop_pair"]:
+            static_adv.append("bishop pair")
+        for p in pawn_structure[color_name].get("passed", []):
+            static_adv.append(f"passed pawn on {p}")
+        for o in smp[color_name]["good_knights"]:
+            static_adv.append(f"knight outpost on {o['square']}")
+
+        # Static weaknesses
+        for p in pawn_structure[color_name].get("doubled", []):
+            static_weak.append(f"doubled pawn on {p}")
+        for p in pawn_structure[color_name].get("isolated", []):
+            static_weak.append(f"isolated pawn on {p}")
+        for p in pawn_structure[color_name].get("backward", []):
+            static_weak.append(f"backward pawn on {p}")
+        if king_safety[color_name].get("missing_shield"):
+            ms = king_safety[color_name]["missing_shield"]
+            if len(ms) >= 2:
+                static_weak.append(f"weakened king shelter ({len(ms)} missing shield pawns)")
+
+        # Dynamic advantages
+        if initiative[color_name]["development_lead"] > 0:
+            dynamic_adv.append("development lead")
+        tc = initiative[color_name]["threats_count"]
+        if tc >= 2:
+            dynamic_adv.append(f"{tc} tactical threats")
+        elif tc == 1:
+            dynamic_adv.append("1 tactical threat")
+        if initiative[color_name]["checks_available"] >= 2:
+            dynamic_adv.append("multiple checks available")
+
+        # Dynamic weaknesses
+        ks = king_safety[color_name]
+        if not ks.get("likely_castled") and not ks.get("can_castle_kingside") \
+                and not ks.get("can_castle_queenside"):
+            pass  # can't castle but maybe already safe
+        elif not ks.get("likely_castled") and game_phase["phase"] in ("opening", "middlegame"):
+            if ks.get("can_castle_kingside") or ks.get("can_castle_queenside"):
+                dynamic_weak.append("king uncastled")
+
+        # Scores
+        static_score = len(static_adv) - len(static_weak)
+        dynamic_score = len(dynamic_adv) - len(dynamic_weak)
+
+        sides[color_name] = {
+            "static_advantages": static_adv,
+            "static_weaknesses": static_weak,
+            "dynamic_advantages": dynamic_adv,
+            "dynamic_weaknesses": dynamic_weak,
+            "static_score": static_score,
+            "dynamic_score": dynamic_score,
+        }
+
+    # Position character
+    if total_pawns >= 14 and open_file_count <= 1 and total_threats <= 2:
+        position_character = "static"
+    elif open_file_count >= 3 or total_threats >= 5:
+        position_character = "dynamic"
+    else:
+        position_character = "transitional"
+
+    # Dominant factor
+    w_static = sides["white"]["static_score"] - sides["black"]["static_score"]
+    w_dynamic = sides["white"]["dynamic_score"] - sides["black"]["dynamic_score"]
+    if abs(w_static) > abs(w_dynamic) + 1:
+        dominant_factor = "statics"
+    elif abs(w_dynamic) > abs(w_static) + 1:
+        dominant_factor = "dynamics"
+    else:
+        dominant_factor = "balanced"
+
+    # Compensation: one side has static deficit but dynamic surplus
+    compensation = False
+    for color_name in ["white", "black"]:
+        s = sides[color_name]
+        if s["static_score"] < 0 and s["dynamic_score"] > 0 and \
+                s["dynamic_score"] >= abs(s["static_score"]):
+            compensation = True
+            break
+
+    # Engine assessment
+    engine_assessment = None
+    if engine and engine.get("available") and engine.get("eval"):
+        ev = engine["eval"]
+        score_cp = ev.get("score_cp")
+        if score_cp is not None:
+            # Naive static estimate
+            mat_balance = material["balance"] * 100
+            bp_bonus = 50 if material["white"]["bishop_pair"] else 0
+            bp_bonus -= 50 if material["black"]["bishop_pair"] else 0
+            passed_bonus = len(pawn_structure["white"].get("passed", [])) * 30
+            passed_bonus -= len(pawn_structure["black"].get("passed", [])) * 30
+            weak_penalty = 0
+            for side_name, sign in [("white", 1), ("black", -1)]:
+                ps = pawn_structure[side_name]
+                weak_penalty += sign * (
+                    len(ps.get("doubled", [])) + len(ps.get("isolated", []))
+                    + len(ps.get("backward", []))
+                ) * 30
+            static_est = mat_balance + bp_bonus + passed_bonus - weak_penalty
+
+            discrepancy = abs(score_cp - static_est)
+            if discrepancy > 75:
+                sign = "+" if score_cp >= 0 else ""
+                est_sign = "+" if static_est >= 0 else ""
+                engine_assessment = (
+                    f"Engine eval ({sign}{score_cp / 100:.2f}) exceeds static estimate "
+                    f"({est_sign}{static_est / 100:.2f}) by {discrepancy}cp — "
+                    f"dynamic factors provide significant compensation."
+                )
+
+    return {
+        "white": sides["white"],
+        "black": sides["black"],
+        "position_character": position_character,
+        "dominant_factor": dominant_factor,
+        "compensation_detected": compensation,
+        "engine_assessment": engine_assessment,
+    }
+
+
 # ── Main analysis ─────────────────────────────────────────────────────────────
 
 def analyze_position(board: chess.Board, engine: EngineEval | None = None,
@@ -724,6 +1080,21 @@ def analyze_position(board: chess.Board, engine: EngineEval | None = None,
         }
     else:
         result["engine"] = {"available": False}
+
+    # Three additional imbalance assessments (depend on engine + prior analyzers)
+    result["superior_minor_piece"] = analyze_superior_minor_piece(
+        board, result["material"], result["piece_activity"],
+        result["pawn_structure"], result["files"], result["game_phase"],
+        engine=result.get("engine"),
+    )
+    result["initiative"] = analyze_initiative(
+        board, result["development"], result["king_safety"],
+        result["tactics"], result["pins"], result["piece_activity"],
+        engine=result.get("engine"),
+    )
+    result["statics_vs_dynamics"] = analyze_statics_vs_dynamics(
+        board, result, engine=result.get("engine"),
+    )
 
     return result
 
@@ -957,6 +1328,77 @@ def format_text(data: dict) -> str:
         if d["pieces_on_starting_squares"]:
             lines.append(f"    Still home: {', '.join(d['pieces_on_starting_squares'])}")
     lines.append("")
+
+    # Superior Minor Piece
+    if "superior_minor_piece" in data:
+        smp = data["superior_minor_piece"]
+        lines.append("── Superior Minor Piece ──")
+        lines.append(f"  Position type: {smp['position_type']}")
+        for side in ["white", "black"]:
+            s = smp[side]
+            parts = [f"{s['bishops']}B {s['knights']}N"]
+            if s["bishop_pair"]:
+                parts.append("bishop pair")
+            if s["bad_bishops"]:
+                parts.append(f"bad bishop(s): {', '.join(s['bad_bishops'])}")
+            if s["good_knights"]:
+                gk_strs = [f"{g['square']}{'(pawn)' if g['pawn_defended'] else ''}"
+                           for g in s["good_knights"]]
+                parts.append(f"outpost(s): {', '.join(gk_strs)}")
+            lines.append(f"  {side.capitalize()}: {'; '.join(parts)}  [score: {s['minor_piece_score']}]")
+        lines.append(f"  Verdict: {smp['verdict']}")
+        if smp.get("engine_assessment"):
+            lines.append(f"  Engine: {smp['engine_assessment']}")
+        lines.append("")
+
+    # Initiative
+    if "initiative" in data:
+        init = data["initiative"]
+        lines.append("── Initiative ──")
+        for side in ["white", "black"]:
+            s = init[side]
+            parts = []
+            if s["checks_available"]:
+                parts.append(f"{s['checks_available']} checks")
+            if s["captures_available"]:
+                parts.append(f"{s['captures_available']} captures")
+            if s["threats_count"]:
+                parts.append(f"{s['threats_count']} threats")
+            if s["pins_imposed"]:
+                parts.append(f"{s['pins_imposed']} pins imposed")
+            if s["development_lead"]:
+                parts.append(f"+{s['development_lead']} dev lead")
+            if s["attackers_near_enemy_king"]:
+                parts.append(f"{s['attackers_near_enemy_king']} attackers near king")
+            desc = "; ".join(parts) if parts else "no dynamic pressure"
+            lines.append(f"  {side.capitalize()}: {desc}  [score: {s['initiative_score']}]")
+        lines.append(f"  Initiative: {init['side_with_initiative']}")
+        if init.get("engine_assessment"):
+            lines.append(f"  Engine: {init['engine_assessment']}")
+        lines.append("")
+
+    # Statics vs Dynamics
+    if "statics_vs_dynamics" in data:
+        svd = data["statics_vs_dynamics"]
+        lines.append("── Statics vs Dynamics ──")
+        lines.append(f"  Position character: {svd['position_character']}")
+        for side in ["white", "black"]:
+            s = svd[side]
+            lines.append(f"  {side.capitalize()}:")
+            if s["static_advantages"]:
+                lines.append(f"    Static +: {', '.join(s['static_advantages'])}")
+            if s["static_weaknesses"]:
+                lines.append(f"    Static -: {', '.join(s['static_weaknesses'])}")
+            if s["dynamic_advantages"]:
+                lines.append(f"    Dynamic +: {', '.join(s['dynamic_advantages'])}")
+            if s["dynamic_weaknesses"]:
+                lines.append(f"    Dynamic -: {', '.join(s['dynamic_weaknesses'])}")
+        lines.append(f"  Dominant factor: {svd['dominant_factor']}")
+        if svd["compensation_detected"]:
+            lines.append("  ⚡ Compensation detected")
+        if svd.get("engine_assessment"):
+            lines.append(f"  Engine: {svd['engine_assessment']}")
+        lines.append("")
 
     # Engine evaluation
     eng = data.get("engine", {})

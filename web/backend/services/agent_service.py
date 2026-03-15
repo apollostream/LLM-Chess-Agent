@@ -32,6 +32,8 @@ Pre-computed analysis and engine evaluation are provided below — use them as y
 Engine evaluation (Stockfish depth {depth}, top {lines} lines):
 {engine_json}
 
+IMPORTANT SCORE CONVENTION: Engine scores are ALWAYS from White's perspective. Positive (+) means White is better, negative (−) means Black is better. For example, "+2.54" when Black is to move means WHITE is ahead by 2.54 pawns — Black is LOSING. Do NOT misinterpret a positive score as good for Black.
+
 IMPORTANT: When discussing candidate moves, plans, or tactical lines, you MUST ground your analysis in the engine's principal variations above. Do not propose moves or continuations that contradict the engine evaluation. Reference specific PV lines when relevant.
 
 When citing evaluation scores, quote the EXACT score_display values from the engine data above — do not round, interpolate, or approximate. For example, if top_lines[0] shows score_display "+38.18", write "+38.18", not "+7.49" or "roughly +38".
@@ -51,6 +53,8 @@ Pre-computed analysis data:
 _SYNTHESIS_PROMPT = """Compose a Game Synopsis for this chess game.
 
 You are given Player's Guides for {n} critical positions — each is a PV-grounded positional analysis. Synthesize them into a coherent narrative.
+
+IMPORTANT SCORE CONVENTION: Engine scores are ALWAYS from White's perspective. Positive (+) means White is better, negative (−) means Black is better. "+2.54" means White is ahead, not the side to move. Do NOT misinterpret the sign.
 
 IMPORTANT: Each critical moment header includes "Engine best move: [move] ([score])" — this is the engine's TOP recommendation at that position. When describing what should have been played, you MUST cite this move AND its exact score. Do not substitute alternative moves from lower-ranked engine lines or your own analysis. Do not round, interpolate, or approximate the evaluation score — quote it verbatim from the header.
 

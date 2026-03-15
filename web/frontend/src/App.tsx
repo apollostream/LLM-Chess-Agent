@@ -52,9 +52,14 @@ function App() {
     if (prevGameInitStatus.current !== "ready" && gameInitState.status === "ready") {
       setSelectedMoments(topMomentsByMagnitude(gameInitState.momentsAll, 5));
       clearAnalysisCache();
+      // Flush stale Claude output (guide/synopsis) so re-runs use fresh prompts
+      sseActions.reset();
+      setCachedContent(null);
+      setActiveMode(null);
+      claudeCache.current.clear();
     }
     prevGameInitStatus.current = gameInitState.status;
-  }, [gameInitState.status, gameInitState.momentsAll, clearAnalysisCache]);
+  }, [gameInitState.status, gameInitState.momentsAll, clearAnalysisCache, sseActions]);
 
   // When streaming finishes, cache the result
   useEffect(() => {

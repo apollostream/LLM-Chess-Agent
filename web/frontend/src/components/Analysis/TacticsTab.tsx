@@ -240,7 +240,13 @@ function TierBlock({ title, tier, motifs }: {
   );
 }
 
-export function TacticsTab({ tactics }: { tactics: TacticsResult }) {
+export function TacticsTab({ tactics, isCheckmate, isStalemate }: { tactics: TacticsResult; isCheckmate?: boolean; isStalemate?: boolean }) {
+  if (isCheckmate) {
+    return <div className="tactics-empty fade-in">Checkmate. No further tactics to analyze.</div>;
+  }
+  if (isStalemate) {
+    return <div className="tactics-empty fade-in">Stalemate. No further tactics to analyze.</div>;
+  }
   const hasAny = [tactics.static, tactics.threats, tactics.sequences, tactics.opponent_threats].some(
     (tier) => tier && Object.values(tier).some((v) => {
       if (Array.isArray(v)) return v.length > 0;

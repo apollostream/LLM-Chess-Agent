@@ -339,6 +339,35 @@ function ImbalanceRow({ summary }: { summary: ImbalanceSummary }) {
 }
 
 export function ImbalancesTab({ analysis }: Props) {
+  if (analysis.is_checkmate) {
+    const winner = analysis.side_to_move === "white" ? "Black" : "White";
+    return (
+      <div className="fade-in">
+        <div className="imb-meta">
+          Move {analysis.move_number} &middot; Game Over
+        </div>
+        <div className="imb-row">
+          <div className="imb-row-title" style={{ fontSize: 16 }}>Checkmate</div>
+          <div className="imb-row-verdict">{winner} wins.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (analysis.is_stalemate) {
+    return (
+      <div className="fade-in">
+        <div className="imb-meta">
+          Move {analysis.move_number} &middot; Game Over
+        </div>
+        <div className="imb-row">
+          <div className="imb-row-title" style={{ fontSize: 16 }}>Stalemate</div>
+          <div className="imb-row-verdict">Draw by stalemate.</div>
+        </div>
+      </div>
+    );
+  }
+
   const phase = (analysis.game_phase as any)?.phase || "";
 
   const summaries: ImbalanceSummary[] = [

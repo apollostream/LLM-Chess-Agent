@@ -38,7 +38,7 @@ export function AnalysisPanel({ analysis, loading, error }: Props) {
         {!loading && !error && analysis && (
           <>
             {tab === "Imbalances" && <ImbalancesTab analysis={analysis} />}
-            {tab === "Tactics" && <TacticsTab tactics={analysis.tactics} />}
+            {tab === "Tactics" && <TacticsTab tactics={analysis.tactics} isCheckmate={analysis.is_checkmate} isStalemate={analysis.is_stalemate} />}
             {tab === "Engine" && <EngineTab analysis={analysis} />}
           </>
         )}

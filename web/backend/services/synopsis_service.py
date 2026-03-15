@@ -24,6 +24,7 @@ from config import PROJECT_ROOT
 from services.agent_service import stream_agent, _sse
 from services.cache import agent_cache, analysis_cache, engine_cache
 from services import chess_pipeline
+from services import game_store
 
 ANALYSIS_DIR = PROJECT_ROOT / "analysis"
 
@@ -37,47 +38,72 @@ async def stream_synopsis(
     """Run the full synopsis pipeline, yielding SSE events throughout."""
     n = len(moments)
 
-    # --- Phase 1: Engine + Analysis (parallel) ---
-    sem = asyncio.Semaphore(2)  # limit Stockfish concurrency
+    # --- Phase 1: Engine + Analysis (parallel or from game cache) ---
     analysis_results: dict[str, dict] = {}
     engine_results: dict[str, dict] = {}
 
-    async def _fetch_position(i: int, fen: str) -> None:
-        async with sem:
-            # Check analysis cache
+    g = game_store.active_game
+
+    if g:
+        # Read engine data from game cache — no Stockfish calls needed
+        for i, m in enumerate(moments):
+            fen = m["fen_before"]
+            cached_engine = g.engine_evals.get(fen)
+            if cached_engine:
+                engine_results[fen] = cached_engine
+
+            # Analysis still needs to be computed (deterministic, no Stockfish)
             cached_analysis = analysis_cache.get(fen, "engine")
             if cached_analysis is not None:
                 analysis_results[fen] = cached_analysis
             else:
                 result = await asyncio.to_thread(
-                    chess_pipeline.analyze_position, fen, True, depth, lines
+                    chess_pipeline.analyze_position, fen, False, depth, lines
                 )
+                # Inject cached engine data into analysis
+                if cached_engine:
+                    result["engine"] = cached_engine
                 analysis_cache.put(fen, "engine", value=result)
                 analysis_results[fen] = result
 
-            # Check engine cache
-            cached_engine = engine_cache.get(fen, str(depth), str(lines))
-            if cached_engine is not None:
-                engine_results[fen] = cached_engine
-            else:
-                result = await asyncio.to_thread(
-                    chess_pipeline.evaluate_position, fen, depth, lines
-                )
-                if result:
-                    engine_cache.put(fen, str(depth), str(lines), value=result)
-                    engine_results[fen] = result
+            yield _sse({"type": "progress", "phase": "engine", "current": i + 1, "total": n})
+    else:
+        # Fallback: original behavior with Stockfish calls
+        sem = asyncio.Semaphore(2)
 
-    tasks = []
-    for i, m in enumerate(moments):
-        fen = m["fen_before"]
-        tasks.append(_fetch_position(i, fen))
+        async def _fetch_position(i: int, fen: str) -> None:
+            async with sem:
+                cached_analysis = analysis_cache.get(fen, "engine")
+                if cached_analysis is not None:
+                    analysis_results[fen] = cached_analysis
+                else:
+                    result = await asyncio.to_thread(
+                        chess_pipeline.analyze_position, fen, True, depth, lines
+                    )
+                    analysis_cache.put(fen, "engine", value=result)
+                    analysis_results[fen] = result
 
-    # Run all engine/analysis tasks, yielding progress after each completes
-    completed = 0
-    for coro in asyncio.as_completed(tasks):
-        await coro
-        completed += 1
-        yield _sse({"type": "progress", "phase": "engine", "current": completed, "total": n})
+                cached_engine = engine_cache.get(fen, str(depth), str(lines))
+                if cached_engine is not None:
+                    engine_results[fen] = cached_engine
+                else:
+                    result = await asyncio.to_thread(
+                        chess_pipeline.evaluate_position, fen, depth, lines
+                    )
+                    if result:
+                        engine_cache.put(fen, str(depth), str(lines), value=result)
+                        engine_results[fen] = result
+
+        tasks = []
+        for i, m in enumerate(moments):
+            fen = m["fen_before"]
+            tasks.append(_fetch_position(i, fen))
+
+        completed = 0
+        for coro in asyncio.as_completed(tasks):
+            await coro
+            completed += 1
+            yield _sse({"type": "progress", "phase": "engine", "current": completed, "total": n})
 
     # --- Phase 2: Player's Guides (sequential, cached) ---
     guides: list[str] = []
@@ -139,12 +165,27 @@ async def stream_synopsis(
             score = top.get("score_display", "")
             if best_move:
                 engine_best = f"\nEngine best move: {best_move} ({score})"
+                # Include alternative lines so synthesis can contrast
+                for j, alt in enumerate(eng["top_lines"][1:], 2):
+                    alt_move = alt.get("best_move", "")
+                    alt_score = alt.get("score_display", "")
+                    if alt_move:
+                        engine_best += f"\nEngine line {j}: {alt_move} ({alt_score})"
+
+        # Strip eval scores from guide text so the synthesis prompt uses
+        # the authoritative header values, not hallucinated ones.
+        cleaned_guide = re.sub(
+            r"[(\[]\s*[+\-−]?\d+\.\d+\s*[)\]]"  # (+1.23) or [+1.23]
+            r"|(?<=\s)[+\-−]\d+\.\d+(?=[\s,;.)\"]|$)",  # bare +1.23
+            "",
+            guide_text,
+        )
 
         section = (
             f"### Move {m['move_number']} ({m['side']}): {m['san']} "
             f"({m.get('classification', 'unknown')}, Δ{m.get('delta_cp', 0)}cp)\n"
             f"FEN: {fen}{engine_best}\n\n"
-            f"{guide_text}\n\n---"
+            f"{cleaned_guide}\n\n---"
         )
         guide_sections.append(section)
 

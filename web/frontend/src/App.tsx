@@ -11,7 +11,7 @@ import { CriticalMoments, momentKey, topMomentsByMagnitude } from "./components/
 import { useChessGame } from "./hooks/useChessGame";
 import { useAnalysis } from "./hooks/useAnalysis";
 import { useSSE } from "./hooks/useSSE";
-import { detectNarrative } from "./api/client";
+import { useGameInit } from "./hooks/useGameInit";
 import { openReport } from "./utils/exportReport";
 import type { CriticalMoment } from "./api/types";
 
@@ -28,9 +28,8 @@ function App() {
   const { analysis, loading, error, useEngine, setUseEngine } = useAnalysis(game.fen);
   const [pgnText, setPgnText] = useState<string | null>(null);
 
-  const [moments, setMoments] = useState<CriticalMoment[]>([]);
-  const [momentsLoading, setMomentsLoading] = useState(false);
-  const [momentsError, setMomentsError] = useState<string | null>(null);
+  const [gameInitState, gameInitActions] = useGameInit();
+  const moments = gameInitState.momentsAll;
   const [selectedMoments, setSelectedMoments] = useState<Set<string>>(new Set());
 
   const [showWhiteThreats, setShowWhiteThreats] = useState(true);
@@ -45,6 +44,15 @@ function App() {
 
   // Track which synopsis key is active for caching
   const activeSynopsisKey = useRef<string | null>(null);
+
+  // Auto-select top 5 moments when game init completes
+  const prevGameInitStatus = useRef(gameInitState.status);
+  useEffect(() => {
+    if (prevGameInitStatus.current !== "ready" && gameInitState.status === "ready") {
+      setSelectedMoments(topMomentsByMagnitude(gameInitState.momentsAll, 5));
+    }
+    prevGameInitStatus.current = gameInitState.status;
+  }, [gameInitState.status, gameInitState.momentsAll]);
 
   // When streaming finishes, cache the result
   useEffect(() => {
@@ -107,36 +115,20 @@ function App() {
   }, [sseActions]);
 
   const handleFen = useCallback(
-    (fen: string) => { actions.setFen(fen); setPgnText(null); setMoments([]); setSelectedMoments(new Set()); clearClaudeOutput(); },
-    [actions, clearClaudeOutput],
+    (fen: string) => { actions.setFen(fen); setPgnText(null); setSelectedMoments(new Set()); clearClaudeOutput(); gameInitActions.reset(); },
+    [actions, clearClaudeOutput, gameInitActions],
   );
 
   const handlePgn = useCallback(
     (pgn: string) => {
       if (!actions.loadPgn(pgn)) { alert("Invalid PGN"); return; }
       setPgnText(pgn);
-      setMoments([]);
       setSelectedMoments(new Set());
       clearClaudeOutput();
+      gameInitActions.initialize(pgn);
     },
-    [actions, clearClaudeOutput],
+    [actions, clearClaudeOutput, gameInitActions],
   );
-
-  const handleDetectMoments = useCallback(async () => {
-    if (!pgnText) return;
-    setMomentsLoading(true);
-    setMomentsError(null);
-    try {
-      const result = await detectNarrative({ pgn: pgnText });
-      setMoments(result.critical_moments);
-      // Auto-select top 5 by eval swing magnitude
-      setSelectedMoments(topMomentsByMagnitude(result.critical_moments, 5));
-    } catch (err) {
-      setMomentsError((err as Error).message);
-    } finally {
-      setMomentsLoading(false);
-    }
-  }, [pgnText]);
 
   const handleToggleMoment = useCallback((m: CriticalMoment) => {
     setSelectedMoments((prev) => {
@@ -207,13 +199,11 @@ function App() {
 
   const handleExport = useCallback(() => {
     if (!claudeContent) return;
-    const selected = moments.filter((m) => selectedMoments.has(momentKey(m)));
     openReport({
       markdown: claudeContent,
       mode: activeMode || "guide",
-      moments: activeMode === "synopsis" ? selected : undefined,
     });
-  }, [claudeContent, activeMode, moments, selectedMoments]);
+  }, [claudeContent, activeMode]);
 
   const taggedShapes = useMemo(() => {
     if (!analysis?.tactics) return [];
@@ -295,22 +285,23 @@ function App() {
 
           {game.hasGame && (
             <div>
-              {moments.length === 0 && !momentsLoading && (
-                <button
-                  onClick={handleDetectMoments}
-                  disabled={!pgnText}
-                  className="btn btn-secondary"
-                >
-                  Detect Critical Moments
-                </button>
-              )}
-              {momentsLoading && (
+              {gameInitState.status === "evaluating" && gameInitState.progress && (
                 <div className="analysis-loading pulse" style={{ fontSize: 12 }}>
-                  Sweeping all moves with Stockfish...
+                  {gameInitState.progress.phase === "engine" &&
+                    `Evaluating positions ${gameInitState.progress.current}/${gameInitState.progress.total}...`}
+                  {gameInitState.progress.phase === "moments" &&
+                    `Detecting critical moments...`}
+                  {gameInitState.progress.phase === "parse" &&
+                    `Parsing PGN...`}
                 </div>
               )}
-              {momentsError && (
-                <div className="analysis-error" style={{ fontSize: 12 }}>{momentsError}</div>
+              {gameInitState.status === "ready" && gameInitState.cached && (
+                <div className="analysis-loading" style={{ fontSize: 12, color: "var(--success)" }}>
+                  Loaded from cache
+                </div>
+              )}
+              {gameInitState.status === "error" && gameInitState.error && (
+                <div className="analysis-error" style={{ fontSize: 12 }}>{gameInitState.error}</div>
               )}
               <CriticalMoments
                 moments={moments}
@@ -344,7 +335,7 @@ function App() {
             >
               Deep Analysis (BFIH)
             </button>
-            {game.hasGame && selectedMoments.size > 0 && (
+            {game.hasGame && selectedMoments.size > 0 && gameInitState.status === "ready" && (
               <button
                 onClick={handleSynopsis}
                 disabled={sseState.streaming}

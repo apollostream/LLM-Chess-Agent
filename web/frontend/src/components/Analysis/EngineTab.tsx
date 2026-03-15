@@ -20,14 +20,18 @@ export function EngineTab({ analysis }: Props) {
   const ev = engine.eval;
   if (!ev) return <div className="engine-empty">No engine data.</div>;
 
+  // Prefer top_lines[0] when available — multi-PV ranking is more
+  // reliable than the separate single-PV search for "best move".
+  const best = engine.top_lines?.[0] ?? ev;
+
   return (
     <div className="fade-in">
-      <div className="engine-score">{ev.score_display}</div>
+      <div className="engine-score">{best.score_display}</div>
       <div className="engine-detail">
-        <strong>Best:</strong> {ev.best_move}
+        <strong>Best:</strong> {best.best_move}
       </div>
-      {ev.pv && ev.pv.length > 0 && (
-        <div className="engine-pv">{ev.pv.join(" ")}</div>
+      {best.pv && best.pv.length > 0 && (
+        <div className="engine-pv">{best.pv.join(" ")}</div>
       )}
       {ev.wdl && (
         <div className="engine-wdl">

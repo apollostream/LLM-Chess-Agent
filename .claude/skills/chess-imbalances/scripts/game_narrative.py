@@ -208,6 +208,102 @@ def detect_critical_moments(
     return sorted(moments, key=lambda m: (m.move_number, 0 if m.side == "white" else 1))
 
 
+def detect_critical_moments_from_cache(
+    pgn_text: str,
+    eval_cache: dict[str, dict],
+    threshold_cp: int = 50,
+    decay_scale_cp: int | None = 750,
+) -> list[CriticalMoment]:
+    """Detect critical moments using pre-computed engine evaluations.
+
+    Same logic as detect_critical_moments() but reads from a cache instead
+    of calling Stockfish, and accepts PGN text directly (not a file path).
+
+    Args:
+        pgn_text: PGN game text.
+        eval_cache: FEN → {"eval": {"score_cp": int, "best_move": str, ...}, "top_lines": [...]}
+        threshold_cp: Minimum |delta| in centipawns to flag as critical.
+        decay_scale_cp: Exponential decay constant.  None disables decay.
+
+    Returns:
+        List of CriticalMoment objects, sorted by move number.
+    """
+    game = chess.pgn.read_game(io.StringIO(pgn_text))
+    if game is None:
+        return []
+
+    board = game.board()
+    moves = list(game.mainline_moves())
+    moments = []
+
+    # Get starting position eval from cache
+    start_fen = board.fen()
+    start_cached = eval_cache.get(start_fen)
+    if not start_cached or not start_cached.get("eval"):
+        return []
+
+    prev_eval = start_cached["eval"]
+    prev_cp = prev_eval.get("score_cp", 0) or 0
+
+    for i, move in enumerate(moves):
+        fen_before = board.fen()
+        san = board.san(move)
+        move_number = (i // 2) + 1
+        side = "white" if i % 2 == 0 else "black"
+
+        # Get best move from cache for the position before the move
+        cached_before = eval_cache.get(fen_before, {})
+        best_move = cached_before.get("eval", {}).get("best_move") if cached_before else None
+
+        board.push(move)
+        fen_after = board.fen()
+
+        # Get eval after move from cache
+        cached_after = eval_cache.get(fen_after)
+        if not cached_after or not cached_after.get("eval"):
+            continue
+
+        curr_eval = cached_after["eval"]
+        curr_cp = curr_eval.get("score_cp")
+        if curr_cp is None:
+            mate = curr_eval.get("mate_in")
+            if mate is not None:
+                curr_cp = 10000 if mate > 0 else -10000
+            else:
+                continue
+
+        delta = curr_cp - prev_cp
+        abs_delta = abs(delta)
+
+        decay = eval_decay(prev_cp, decay_scale_cp)
+        effective_threshold = threshold_cp / decay if decay > 0 else threshold_cp
+
+        if abs_delta >= effective_threshold:
+            if side == "white":
+                cp_loss = max(0, -delta)
+            else:
+                cp_loss = max(0, delta)
+
+            classification = _classify_cp_loss(cp_loss)
+
+            moments.append(CriticalMoment(
+                move_number=move_number,
+                side=side,
+                san=san,
+                fen_before=fen_before,
+                fen_after=fen_after,
+                eval_before_cp=prev_cp,
+                eval_after_cp=curr_cp,
+                delta_cp=delta,
+                classification=classification,
+                engine_best_move=best_move,
+            ))
+
+        prev_cp = curr_cp
+
+    return sorted(moments, key=lambda m: (m.move_number, 0 if m.side == "white" else 1))
+
+
 # ── Board Diagram Generation ────────────────────────────────────────────────
 
 def replay_to_position(pgn_text: str, move_number: int, side: str) -> tuple[str, str]:

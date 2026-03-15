@@ -45,3 +45,11 @@ export function classifyMove(req: ClassifyRequest) {
 export function detectNarrative(req: NarrativeRequest): Promise<NarrativeResponse> {
   return post("/narrative", req);
 }
+
+export function saveGame(): Promise<{ saved: boolean; path?: string }> {
+  return post("/game/save", {});
+}
+
+export function clearGame(): Promise<{ cleared: boolean }> {
+  return post("/game/clear", {});
+}

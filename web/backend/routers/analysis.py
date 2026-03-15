@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from models.schemas import AnalyzeRequest, TacticsRequest, EngineRequest, ClassifyRequest
 from services.cache import analysis_cache, tactics_cache, engine_cache
 from services import chess_pipeline
+from services import game_store
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
@@ -30,6 +31,17 @@ async def analyze(req: AnalyzeRequest):
     cached = analysis_cache.get(req.fen, req.use_engine, req.depth, req.lines)
     if cached is not None:
         return cached
+
+    # When a game is active and engine data is cached, run imbalance analysis
+    # without Stockfish and inject the cached engine data instead.
+    g = game_store.active_game
+    if g and req.use_engine and req.fen in g.engine_evals:
+        result = await asyncio.to_thread(
+            chess_pipeline.analyze_position, req.fen, False, req.depth, req.lines
+        )
+        result["engine"] = g.engine_evals[req.fen]
+        analysis_cache.put(req.fen, req.use_engine, req.depth, req.lines, value=result)
+        return result
 
     result = await asyncio.to_thread(
         chess_pipeline.analyze_position, req.fen, req.use_engine, req.depth, req.lines
@@ -54,6 +66,11 @@ async def tactics(req: TacticsRequest):
 @router.post("/engine")
 async def engine(req: EngineRequest):
     _validate_fen(req.fen)
+
+    # Check game cache first (single source of truth)
+    g = game_store.active_game
+    if g and req.fen in g.engine_evals:
+        return g.engine_evals[req.fen]
 
     cached = engine_cache.get(req.fen, req.depth, req.lines)
     if cached is not None:

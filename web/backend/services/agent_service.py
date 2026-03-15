@@ -34,6 +34,8 @@ Engine evaluation (Stockfish depth {depth}, top {lines} lines):
 
 IMPORTANT: When discussing candidate moves, plans, or tactical lines, you MUST ground your analysis in the engine's principal variations above. Do not propose moves or continuations that contradict the engine evaluation. Reference specific PV lines when relevant.
 
+When citing evaluation scores, quote the EXACT score_display values from the engine data above — do not round, interpolate, or approximate. For example, if top_lines[0] shows score_display "+38.18", write "+38.18", not "+7.49" or "roughly +38".
+
 Synthesize a coach-style Player's Guide: explain the key imbalances, who stands better, and recommend concrete plans for the side to move.
 
 Analysis data:
@@ -50,7 +52,7 @@ _SYNTHESIS_PROMPT = """Compose a Game Synopsis for this chess game.
 
 You are given Player's Guides for {n} critical positions — each is a PV-grounded positional analysis. Synthesize them into a coherent narrative.
 
-IMPORTANT: Each critical moment header includes "Engine best move: ..." — this is the engine's TOP recommendation at that position. When describing what should have been played, you MUST cite this move. Do not substitute alternative moves from lower-ranked engine lines or your own analysis.
+IMPORTANT: Each critical moment header includes "Engine best move: [move] ([score])" — this is the engine's TOP recommendation at that position. When describing what should have been played, you MUST cite this move AND its exact score. Do not substitute alternative moves from lower-ranked engine lines or your own analysis. Do not round, interpolate, or approximate the evaluation score — quote it verbatim from the header.
 
 Use this exact formatting template:
 

@@ -184,7 +184,7 @@ interface ExportOptions {
   moments?: CriticalMoment[];
 }
 
-export function openReport({ markdown, mode, title, moments }: ExportOptions): void {
+export function openReport({ markdown, mode, title }: ExportOptions): void {
   const modeLabel =
     mode === "guide" ? "Player's Guide" :
     mode === "deep" ? "Deep Analysis (BFIH)" :
@@ -195,10 +195,9 @@ export function openReport({ markdown, mode, title, moments }: ExportOptions): v
     year: "numeric", month: "long", day: "numeric",
   });
 
-  // For synopsis, inject board image markdown before converting to HTML
-  const finalMarkdown = mode === "synopsis" && moments && moments.length > 0
-    ? injectBoardMarkdown(markdown, moments)
-    : markdown;
+  // Board images are already injected into the markdown by the caller (App.tsx claudeContent memo),
+  // so no need to re-inject here.
+  const finalMarkdown = markdown;
 
   const escapedMd = JSON.stringify(finalMarkdown);
 

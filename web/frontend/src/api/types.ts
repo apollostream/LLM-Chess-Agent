@@ -64,6 +64,39 @@ export interface NarrativeResponse {
   count: number;
 }
 
+/** SSE events from /game/init endpoint. */
+export interface GameInitProgressEvent {
+  type: "progress";
+  phase: "parse" | "engine" | "moments";
+  current: number;
+  total: number;
+}
+
+export interface GameInitCachedEvent {
+  type: "cached";
+  game_id: string;
+  positions: number;
+}
+
+export interface GameInitDoneEvent {
+  type: "done";
+  game_id: string;
+  moments: CriticalMoment[];
+  moments_all: CriticalMoment[];
+  positions: number;
+}
+
+export interface GameInitErrorEvent {
+  type: "error";
+  content: string;
+}
+
+export type GameInitEvent =
+  | GameInitProgressEvent
+  | GameInitCachedEvent
+  | GameInitDoneEvent
+  | GameInitErrorEvent;
+
 /** Tactical motif structure (simplified top-level). */
 export interface TacticsResult {
   static: Record<string, unknown[]>;

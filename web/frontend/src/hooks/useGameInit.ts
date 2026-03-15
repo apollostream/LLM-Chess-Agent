@@ -20,7 +20,7 @@ export interface GameInitState {
 }
 
 export interface GameInitActions {
-  initialize: (pgn: string) => void;
+  initialize: (pgn: string, depth?: number) => void;
   regenerate: () => void;
   reset: () => void;
 }
@@ -39,6 +39,7 @@ export function useGameInit(): [GameInitState, GameInitActions] {
   const [state, setState] = useState<GameInitState>(INITIAL_STATE);
   const abortRef = useRef<AbortController | null>(null);
   const pgnRef = useRef<string | null>(null);
+  const depthRef = useRef<number | undefined>(undefined);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -52,9 +53,10 @@ export function useGameInit(): [GameInitState, GameInitActions] {
   }, [stop]);
 
   const initialize = useCallback(
-    async (pgn: string) => {
+    async (pgn: string, depth?: number) => {
       stop();
       pgnRef.current = pgn;
+      depthRef.current = depth;
       setState({
         ...INITIAL_STATE,
         status: "evaluating",
@@ -67,7 +69,7 @@ export function useGameInit(): [GameInitState, GameInitActions] {
         const res = await fetch("/api/v1/game/init", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pgn }),
+          body: JSON.stringify({ pgn, ...(depth !== undefined && { depth }) }),
           signal: controller.signal,
         });
 
@@ -149,7 +151,7 @@ export function useGameInit(): [GameInitState, GameInitActions] {
 
   const regenerate = useCallback(() => {
     if (pgnRef.current) {
-      initialize(pgnRef.current);
+      initialize(pgnRef.current, depthRef.current);
     }
   }, [initialize]);
 

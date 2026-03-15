@@ -10,6 +10,7 @@ interface UseAnalysisResult {
   error: string | null;
   useEngine: boolean;
   setUseEngine: (v: boolean) => void;
+  clearCache: () => void;
 }
 
 export function useAnalysis(fen: string): UseAnalysisResult {
@@ -58,5 +59,9 @@ export function useAnalysis(fen: string): UseAnalysisResult {
     };
   }, [fen, useEngine, fetchAnalysis]);
 
-  return { analysis, loading, error, useEngine, setUseEngine };
+  const clearCache = useCallback(() => {
+    cache.current.clear();
+  }, []);
+
+  return { analysis, loading, error, useEngine, setUseEngine, clearCache };
 }

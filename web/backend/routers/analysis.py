@@ -32,10 +32,10 @@ async def analyze(req: AnalyzeRequest):
     if cached is not None:
         return cached
 
-    # When a game is active and engine data is cached, run imbalance analysis
-    # without Stockfish and inject the cached engine data instead.
+    # When a game is active and engine data is cached, always inject it —
+    # it's free (no Stockfish call) and keeps the Engine tab working.
     g = game_store.active_game
-    if g and req.use_engine and req.fen in g.engine_evals:
+    if g and req.fen in g.engine_evals:
         result = await asyncio.to_thread(
             chess_pipeline.analyze_position, req.fen, False, req.depth, req.lines
         )

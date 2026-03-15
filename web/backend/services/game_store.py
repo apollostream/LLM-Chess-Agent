@@ -86,13 +86,19 @@ def load_from_disk(
     if lines is not None and data.get("lines") != lines:
         return None
 
+    # Migrate old cache entries: ensure every eval has "available": True
+    evals = data["engine_evals"]
+    for fen_key, ev in evals.items():
+        if "available" not in ev:
+            ev["available"] = True
+
     return GameStore(
         pgn=data["pgn"],
         pgn_hash=data["pgn_hash"],
         positions=data["positions"],
         depth=data["depth"],
         lines=data["lines"],
-        engine_evals=data["engine_evals"],
+        engine_evals=evals,
         critical_moments_all=data.get("critical_moments_all", []),
         critical_moments_selected=data.get("critical_moments_selected", []),
         synopsis_text=data.get("synopsis_text"),

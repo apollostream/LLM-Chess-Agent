@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from config import GAME_INIT_DEPTH_DEFAULT, GAME_INIT_LINES_DEFAULT
 from services import game_store
 from services.game_init_service import initialize_game
 
@@ -14,8 +15,8 @@ router = APIRouter(prefix="/api/v1", tags=["game"])
 
 class GameInitRequest(BaseModel):
     pgn: str
-    depth: int = Field(default=20, ge=1, le=30)
-    lines: int = Field(default=3, ge=1, le=5)
+    depth: int = Field(default=GAME_INIT_DEPTH_DEFAULT, ge=1, le=30)
+    lines: int = Field(default=GAME_INIT_LINES_DEFAULT, ge=1, le=5)
     threshold_cp: int = Field(default=50, ge=10, le=200)
     decay_scale_cp: int | None = Field(default=750, ge=100, le=2000)
 

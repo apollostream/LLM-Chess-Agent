@@ -542,6 +542,54 @@ def analyze_king_safety(board: chess.Board) -> dict:
     return result
 
 
+def enrich_king_safety_with_mate_threats(
+    king_safety: dict, tactics: dict, engine: dict | None = None,
+) -> None:
+    """Add mate_threat info to king_safety when checkmate threats exist.
+
+    Mutates king_safety in-place. Checks both tactical detection
+    (checkmate_threats) and engine eval (mate_in).
+    """
+    # Tactical mate-in-1 threats (from detect_checkmate_threats)
+    for category in ("threats", "opponent_threats"):
+        for cm in tactics.get(category, {}).get("checkmate_threats", []):
+            victim = "black" if cm.get("side") == "white" else "white"
+            if victim in king_safety:
+                king_safety[victim]["mate_threat"] = {
+                    "mate_in": 1,
+                    "move": cm.get("move", ""),
+                    "by": cm.get("side", ""),
+                }
+
+    # Engine mate score (mate_in N, covers deeper mates tactical detection misses)
+    if engine and engine.get("available") and engine.get("eval"):
+        ev = engine["eval"]
+        mate_in = ev.get("mate_in")
+        if mate_in is not None and mate_in != 0:
+            # Positive mate_in = side to move delivers mate
+            # Negative mate_in = side to move gets mated
+            if mate_in > 0:
+                victim = "black"  # white (side to move assumed) delivers mate
+                by = "white"
+            else:
+                victim = "white"
+                by = "black"
+                mate_in = abs(mate_in)
+            best_move = ev.get("best_move", "")
+            pv = ev.get("pv", [])
+            if victim in king_safety:
+                existing = king_safety[victim].get("mate_threat")
+                # Only override if engine finds a shorter or equal mate,
+                # or if no tactical mate was detected
+                if not existing or mate_in <= existing.get("mate_in", 999):
+                    king_safety[victim]["mate_threat"] = {
+                        "mate_in": mate_in,
+                        "move": best_move,
+                        "by": by,
+                        "pv": " ".join(pv[:mate_in * 2]) if pv else "",
+                    }
+
+
 def analyze_space(board: chess.Board) -> dict:
     """Analyze space control — squares controlled beyond the 4th/5th rank."""
     result = {}
@@ -868,9 +916,24 @@ def analyze_initiative(board: chess.Board, development: dict,
     if engine and engine.get("available") and engine.get("eval"):
         ev = engine["eval"]
         score_cp = ev.get("score_cp")
+        mate_in = ev.get("mate_in")
         wdl = ev.get("wdl")
         pv = ev.get("pv", [])
-        if wdl and (wdl.get("win", 0) > 700 or wdl.get("loss", 0) > 700):
+
+        if mate_in is not None and mate_in != 0:
+            # Forced mate detected — this takes absolute priority
+            if mate_in > 0:
+                dominant = "White" if board.turn == chess.WHITE else "Black"
+            else:
+                dominant = "Black" if board.turn == chess.WHITE else "White"
+            abs_mate = abs(mate_in)
+            pv_excerpt = " ".join(pv[:abs_mate * 2]) if pv else ""
+            engine_assessment = f"FORCED MATE: {dominant} has mate in {abs_mate}"
+            if pv_excerpt:
+                engine_assessment += f": {pv_excerpt}."
+            else:
+                engine_assessment += "."
+        elif wdl and (wdl.get("win", 0) > 700 or wdl.get("loss", 0) > 700):
             dominant = "White" if wdl.get("win", 0) > 700 else "Black"
             pv_excerpt = " ".join(pv[:5]) if pv else ""
             engine_assessment = f"Engine's PV shows {dominant} maintaining pressure"
@@ -1082,6 +1145,11 @@ def analyze_position(board: chess.Board, engine: EngineEval | None = None,
         }
     else:
         result["engine"] = {"available": False}
+
+    # Enrich king safety with mate threat data from tactics + engine
+    enrich_king_safety_with_mate_threats(
+        result["king_safety"], result["tactics"], engine=result.get("engine"),
+    )
 
     # Three additional imbalance assessments (depend on engine + prior analyzers)
     result["superior_minor_piece"] = analyze_superior_minor_piece(

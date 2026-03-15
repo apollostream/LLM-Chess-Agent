@@ -732,3 +732,44 @@ class TestWeakBackRankEscapeSquareSafety:
         board = board_from_fen(fen)
         result = tactical_motifs.detect_weak_back_rank(board)
         assert result["black"]["is_weak"] is False
+
+
+class TestCheckmateThreat:
+    def test_queen_mate_not_back_rank(self):
+        """Qc8-h8# is mate — king on g7, not back rank — must still be detected."""
+        # Real game position: pjqweewrq vs Lorenzo-BOT after 54...Kg7
+        # White has Qc8+Qh5, Qch8# is mate in 1.
+        fen = "2Q5/6k1/3K4/7Q/1p5P/1P4p1/6P1/8 w - - 1 55"
+        board = board_from_fen(fen)
+        mates = tactical_motifs.detect_checkmate_threats(board)
+        assert len(mates) >= 1
+        assert any(m["mate_square"] == "h8" for m in mates)
+        assert mates[0]["side"] == "white"
+
+    def test_back_rank_mate_also_detected(self):
+        """Back rank mates should also appear in checkmate_threats."""
+        fen = "6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1"
+        board = board_from_fen(fen)
+        mates = tactical_motifs.detect_checkmate_threats(board)
+        assert len(mates) >= 1
+
+    def test_no_checkmate_starting_position(self):
+        board = chess.Board()
+        mates = tactical_motifs.detect_checkmate_threats(board)
+        assert mates == []
+
+    def test_checkmate_in_analyze_tactics(self):
+        """checkmate_threats should appear in analyze_tactics() output."""
+        fen = "2Q5/6k1/3K4/7Q/1p5P/1P4p1/6P1/8 w - - 1 55"
+        board = board_from_fen(fen)
+        result = tactical_motifs.analyze_tactics(board)
+        assert "checkmate_threats" in result["threats"]
+        assert len(result["threats"]["checkmate_threats"]) >= 1
+
+    def test_opponent_checkmate_threats(self):
+        """Opponent's checkmate threats should also be detected."""
+        # Same position but it's Black's perspective — flip: Black queen on c1, White king on g2
+        fen = "6k1/8/8/8/8/8/5PK1/2q5 b - - 0 1"
+        board = board_from_fen(fen)
+        result = tactical_motifs.analyze_tactics(board)
+        assert "checkmate_threats" in result["opponent_threats"]

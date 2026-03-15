@@ -869,6 +869,31 @@ def detect_double_checks(board: chess.Board) -> list[dict]:
     return double_checks
 
 
+def detect_checkmate_threats(board: chess.Board) -> list[dict]:
+    """Detect ALL checkmate-in-1 threats: any legal move that delivers immediate mate."""
+    mates = []
+    stm = board.turn
+
+    for move in board.legal_moves:
+        board.push(move)
+        if board.is_checkmate():
+            board.pop()
+            try:
+                san = board.san(move)
+            except (ValueError, AssertionError):
+                san = move.uci()
+            mates.append({
+                "move": san,
+                "attacking_piece": _piece_desc(board, move.from_square),
+                "mate_square": chess.square_name(move.to_square),
+                "side": _side_name(stm),
+            })
+        else:
+            board.pop()
+
+    return mates
+
+
 def detect_back_rank_mates(board: chess.Board) -> list[dict]:
     """Detect back rank mate threats: moves that deliver checkmate with king on back rank."""
     mates = []
@@ -1223,6 +1248,7 @@ def _detect_opponent_threats(board: chess.Board) -> dict:
     opp_board.turn = not board.turn
 
     return {
+        "checkmate_threats": detect_checkmate_threats(opp_board),
         "back_rank_mates": detect_back_rank_mates(opp_board),
         "forks": detect_forks(opp_board),
         "discovered_attacks": detect_discovered_attacks(opp_board),
@@ -1245,6 +1271,7 @@ def analyze_tactics(board: chess.Board) -> dict:
             "alignments": detect_alignments(board),
         },
         "threats": {
+            "checkmate_threats": detect_checkmate_threats(board),
             "forks": detect_forks(board),
             "skewers": detect_skewers(board),
             "discovered_attacks": detect_discovered_attacks(board),

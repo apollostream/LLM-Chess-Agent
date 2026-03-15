@@ -15,9 +15,10 @@ from collections.abc import AsyncIterator
 import chess
 import chess.pgn
 
-from config import SCRIPTS_DIR
+from config import GAME_INIT_DEPTH_DEFAULT, GAME_INIT_LINES_DEFAULT, SCRIPTS_DIR
 from services import game_store
 from services.agent_service import _sse
+from services.cache import analysis_cache, engine_cache
 
 # Add scripts dir for engine_eval and game_narrative imports
 _scripts_str = str(SCRIPTS_DIR)
@@ -77,7 +78,7 @@ def _evaluate_all_sync(
         # instead of two, since single-PV was always overridden anyway.
         single = multi[0] if multi and len(multi) > 0 else None
 
-        results[fen] = {"eval": single, "top_lines": multi}
+        results[fen] = {"available": True, "eval": single, "top_lines": multi}
 
         if progress_callback:
             progress_callback(i + 1, len(fens))
@@ -95,8 +96,8 @@ def _select_top_moments(moments: list[dict], n: int = 5) -> list[dict]:
 
 async def initialize_game(
     pgn: str,
-    depth: int = 20,
-    lines: int = 3,
+    depth: int = GAME_INIT_DEPTH_DEFAULT,
+    lines: int = GAME_INIT_LINES_DEFAULT,
     threshold_cp: int = 50,
     decay_scale_cp: int | None = 750,
 ) -> AsyncIterator[str]:
@@ -125,6 +126,8 @@ async def initialize_game(
     cached = game_store.load_from_disk(hash_value, depth=depth, lines=lines)
     if cached is not None:
         game_store.active_game = cached
+        analysis_cache.clear()
+        engine_cache.clear()
         yield _sse({
             "type": "cached",
             "game_id": hash_value[:12],
@@ -202,6 +205,10 @@ async def initialize_game(
         critical_moments_selected=moments_selected,
     )
     game_store.active_game = store
+
+    # Clear stale per-position caches so consumers re-fetch with game cache data
+    analysis_cache.clear()
+    engine_cache.clear()
 
     # Persist to disk
     game_store.save_to_disk(store)

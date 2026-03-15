@@ -35,6 +35,7 @@ def _make_store(**overrides) -> game_store.GameStore:
         lines=3,
         engine_evals={
             "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1": {
+                "available": True,
                 "eval": {"score_cp": 30, "best_move": "e5"},
                 "top_lines": [{"best_move": "e5", "score_cp": 30}],
             },

@@ -126,6 +126,13 @@ export function tacticsToTaggedShapes(tactics: Record<string, any>): TaggedShape
     }
   }
 
+  for (const cm of th.checkmate_threats ?? []) {
+    const side = (cm.side ?? "neutral") as Side;
+    if (cm.attacking_piece && cm.mate_square) {
+      push(arrow(sq(cm.attacking_piece), cm.mate_square as Key, "red"), "threat", side);
+    }
+  }
+
   for (const brm of th.back_rank_mates ?? []) {
     const side = (brm.side ?? "neutral") as Side;
     if (brm.attacking_piece && brm.mate_square) {
@@ -143,6 +150,13 @@ export function tacticsToTaggedShapes(tactics: Record<string, any>): TaggedShape
   // ── Opponent threats (next-move, from opponent's perspective) ───────
 
   const opp = tactics.opponent_threats ?? {};
+
+  for (const cm of opp.checkmate_threats ?? []) {
+    const side = (cm.side ?? "neutral") as Side;
+    if (cm.attacking_piece && cm.mate_square) {
+      push(arrow(sq(cm.attacking_piece), cm.mate_square as Key, "paleRed"), "threat", side);
+    }
+  }
 
   for (const brm of opp.back_rank_mates ?? []) {
     const side = (brm.side ?? "neutral") as Side;

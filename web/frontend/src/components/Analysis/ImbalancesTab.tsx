@@ -122,6 +122,14 @@ function summarizeFiles(data: any): ImbalanceSummary {
 function summarizeKingSafety(data: any, phase: string): ImbalanceSummary {
   const descSide = (s: any): string => {
     const parts: string[] = [];
+
+    // Mate threat takes absolute priority
+    if (s.mate_threat) {
+      const mt = s.mate_threat;
+      parts.push(`MATE IN ${mt.mate_in} (${mt.move})`);
+      return parts.join("; ") + ".";
+    }
+
     if (s.likely_castled) parts.push("castled");
     else if (s.can_castle_kingside || s.can_castle_queenside) {
       const sides = [];
@@ -138,6 +146,25 @@ function summarizeKingSafety(data: any, phase: string): ImbalanceSummary {
     if (s.nearby_attackers?.length) parts.push(`${s.nearby_attackers.length} nearby attacker${s.nearby_attackers.length > 1 ? "s" : ""}`);
     return parts.join("; ") + ".";
   };
+
+  // Check for mate threats first — supersedes all other verdicts
+  const wMate = data.white.mate_threat;
+  const bMate = data.black.mate_threat;
+
+  if (wMate || bMate) {
+    const mt = wMate || bMate;
+    const victim = wMate ? "White" : "Black";
+    const verdict = mt.mate_in === 1
+      ? `${mt.by === "white" ? "White" : "Black"} has CHECKMATE IN 1: ${mt.move}. ${victim}'s king is lost.`
+      : `${mt.by === "white" ? "White" : "Black"} has FORCED MATE in ${mt.mate_in}${mt.pv ? `: ${mt.pv}` : ""}. ${victim}'s king is doomed.`;
+
+    return {
+      title: "King Safety",
+      white: descSide(data.white),
+      black: descSide(data.black),
+      verdict,
+    };
+  }
 
   const wCastled = data.white.likely_castled;
   const bCastled = data.black.likely_castled;

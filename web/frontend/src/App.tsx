@@ -25,13 +25,14 @@ function synopsisCacheKey(selected: Set<string>): string {
 
 function App() {
   const [game, actions] = useChessGame();
-  const { analysis, loading, error, useEngine, setUseEngine } = useAnalysis(game.fen);
+  const { analysis, loading, error, useEngine, setUseEngine, clearCache: clearAnalysisCache } = useAnalysis(game.fen);
   const [pgnText, setPgnText] = useState<string | null>(null);
 
   const [gameInitState, gameInitActions] = useGameInit();
   const moments = gameInitState.momentsAll;
   const [selectedMoments, setSelectedMoments] = useState<Set<string>>(new Set());
 
+  const [engineDepth, setEngineDepth] = useState(12);
   const [showWhiteThreats, setShowWhiteThreats] = useState(true);
   const [showBlackThreats, setShowBlackThreats] = useState(true);
 
@@ -45,14 +46,15 @@ function App() {
   // Track which synopsis key is active for caching
   const activeSynopsisKey = useRef<string | null>(null);
 
-  // Auto-select top 5 moments when game init completes
+  // Auto-select top 5 moments when game init completes + flush stale analysis cache
   const prevGameInitStatus = useRef(gameInitState.status);
   useEffect(() => {
     if (prevGameInitStatus.current !== "ready" && gameInitState.status === "ready") {
       setSelectedMoments(topMomentsByMagnitude(gameInitState.momentsAll, 5));
+      clearAnalysisCache();
     }
     prevGameInitStatus.current = gameInitState.status;
-  }, [gameInitState.status, gameInitState.momentsAll]);
+  }, [gameInitState.status, gameInitState.momentsAll, clearAnalysisCache]);
 
   // When streaming finishes, cache the result
   useEffect(() => {
@@ -125,9 +127,9 @@ function App() {
       setPgnText(pgn);
       setSelectedMoments(new Set());
       clearClaudeOutput();
-      gameInitActions.initialize(pgn);
+      gameInitActions.initialize(pgn, engineDepth);
     },
-    [actions, clearClaudeOutput, gameInitActions],
+    [actions, clearClaudeOutput, gameInitActions, engineDepth],
   );
 
   const handleToggleMoment = useCallback((m: CriticalMoment) => {
@@ -261,6 +263,18 @@ function App() {
                 onChange={(e) => setShowBlackThreats(e.target.checked)}
               />
               Black threats
+            </label>
+            <label className="engine-toggle" title="Search depth for bulk position evaluation (depth 12 ≈ 15s for 100 positions)">
+              Depth
+              <select
+                value={engineDepth}
+                onChange={(e) => setEngineDepth(Number(e.target.value))}
+                style={{ marginLeft: 4, fontSize: "inherit" }}
+              >
+                {[8, 10, 12, 14, 16, 18, 20].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
             </label>
           </div>
 

@@ -12,6 +12,10 @@ SCRIPTS_DIR = PROJECT_ROOT / ".claude" / "skills" / "chess-imbalances" / "script
 ENGINE_DEPTH_DEFAULT = 20
 ENGINE_LINES_DEFAULT = 3
 
+# Game init bulk evaluation defaults (depth 12 ≈ 13s for 97 positions)
+GAME_INIT_DEPTH_DEFAULT = 12
+GAME_INIT_LINES_DEFAULT = 3
+
 # Narrative detection defaults
 NARRATIVE_DEPTH_DEFAULT = 18
 NARRATIVE_THRESHOLD_CP = 50

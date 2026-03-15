@@ -98,6 +98,10 @@ function describeDoubleCheck(d: any): string {
   return `${sideLabel(d.side)} double check: ${d.move} with ${checkers}.`;
 }
 
+function describeCheckmateThreat(c: any): string {
+  return `${sideLabel(c.side)} CHECKMATE: ${c.move} on ${c.mate_square}.`;
+}
+
 function describeBackRankMate(b: any): string {
   return `${sideLabel(b.side)} back rank mate: ${b.move}#!`;
 }
@@ -148,6 +152,7 @@ const STATIC_MOTIFS: Record<string, MotifConfig> = {
 };
 
 const THREAT_MOTIFS: Record<string, MotifConfig> = {
+  checkmate_threats: { label: "Checkmate", icon: "👑", summarize: describeCheckmateThreat },
   forks: { label: "Forks", icon: "🍴", summarize: describeFork },
   skewers: { label: "Skewers", icon: "🗡️", summarize: describeSkewer },
   discovered_attacks: { label: "Discovered Attacks", icon: "💥", summarize: describeDiscoveredAttack },
@@ -164,6 +169,7 @@ const SEQUENCE_MOTIFS: Record<string, MotifConfig> = {
 };
 
 const OPPONENT_THREAT_MOTIFS: Record<string, MotifConfig> = {
+  checkmate_threats: { label: "Checkmate Threats", icon: "👑", summarize: describeCheckmateThreat },
   back_rank_mates: { label: "Back Rank Mate Threats", icon: "💀", summarize: describeBackRankMate },
   forks: { label: "Fork Threats", icon: "🍴", summarize: describeFork },
   discovered_attacks: { label: "Discovered Attack Threats", icon: "💥", summarize: describeDiscoveredAttack },

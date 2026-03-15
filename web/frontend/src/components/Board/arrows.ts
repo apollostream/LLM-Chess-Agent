@@ -33,7 +33,35 @@ function circle(key: Key, brush: Brush): DrawShape {
   return { orig: key, brush };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+/** Build shapes for a checkmate position — only the mating pattern. */
+export function checkmateDiagramShapes(diagram: Record<string, any>): DrawShape[] {
+  const shapes: DrawShape[] = [];
+  const kingSquare = diagram.king_square as Key;
+
+  // Red circle on the mated king
+  shapes.push(circle(kingSquare, "red"));
+
+  // Red arrows from checking pieces to the king
+  for (const checker of diagram.checkers ?? []) {
+    shapes.push(arrow(checker.square as Key, kingSquare, "red"));
+  }
+
+  // Blocked escape squares
+  for (const b of diagram.blocked_squares ?? []) {
+    if (b.reason === "attacked" && b.attacker_square) {
+      // Arrow from attacker to the escape square it covers
+      shapes.push(arrow(b.attacker_square as Key, b.square as Key, "paleRed"));
+    } else if (b.reason === "own_piece") {
+      // Circle on own piece blocking escape
+      shapes.push(circle(b.square as Key, "paleBlue"));
+    }
+  }
+
+  return shapes;
+}
+
 export function tacticsToTaggedShapes(tactics: Record<string, any>): TaggedShape[] {
   const tagged: TaggedShape[] = [];
 

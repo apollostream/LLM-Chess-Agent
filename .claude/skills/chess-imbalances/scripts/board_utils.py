@@ -1100,6 +1100,71 @@ def analyze_statics_vs_dynamics(board: chess.Board, result: dict,
     }
 
 
+def _build_checkmate_diagram(board: chess.Board) -> dict:
+    """Build arrows for a checkmate position.
+
+    Returns:
+        checkers: list of {square, piece} — pieces delivering check
+        king_square: the mated king's square
+        blocked_squares: list of {square, blocked_by} — squares the king
+            can't escape to (own piece, or attacker square + piece)
+    """
+    mated_color = board.turn  # side to move is in checkmate
+    king_sq = board.king(mated_color)
+    attacker_color = not mated_color
+
+    # Pieces delivering check
+    checkers = []
+    for sq in board.checkers():
+        piece = board.piece_at(sq)
+        checkers.append({
+            "square": chess.square_name(sq),
+            "piece": PIECE_NAMES.get(piece.piece_type, "piece") if piece else "piece",
+        })
+
+    # King's adjacent squares and why each is blocked
+    blocked = []
+    king_rank = chess.square_rank(king_sq)
+    king_file = chess.square_file(king_sq)
+    for dr in [-1, 0, 1]:
+        for df in [-1, 0, 1]:
+            if dr == 0 and df == 0:
+                continue
+            r, f = king_rank + dr, king_file + df
+            if not (0 <= r <= 7 and 0 <= f <= 7):
+                continue
+            sq = chess.square(f, r)
+            sq_name = chess.square_name(sq)
+            occupant = board.piece_at(sq)
+
+            if occupant and occupant.color == mated_color:
+                # Blocked by own piece
+                blocked.append({
+                    "square": sq_name,
+                    "reason": "own_piece",
+                    "piece": PIECE_NAMES.get(occupant.piece_type, "piece"),
+                })
+            else:
+                # Check if attacked by enemy — find which piece attacks it
+                attackers = board.attackers(attacker_color, sq)
+                if attackers:
+                    # Pick the first attacker for the arrow
+                    atk_sq = next(iter(attackers))
+                    atk_piece = board.piece_at(atk_sq)
+                    blocked.append({
+                        "square": sq_name,
+                        "reason": "attacked",
+                        "attacker_square": chess.square_name(atk_sq),
+                        "attacker_piece": PIECE_NAMES.get(atk_piece.piece_type, "piece") if atk_piece else "piece",
+                    })
+
+    return {
+        "king_square": chess.square_name(king_sq),
+        "checkers": checkers,
+        "blocked_squares": blocked,
+    }
+
+
 # ── Main analysis ─────────────────────────────────────────────────────────────
 
 def analyze_position(board: chess.Board, engine: EngineEval | None = None,
@@ -1129,6 +1194,9 @@ def analyze_position(board: chess.Board, engine: EngineEval | None = None,
         "is_checkmate": board.is_checkmate(),
         "is_stalemate": board.is_stalemate(),
     }
+
+    if result["is_checkmate"]:
+        result["checkmate_diagram"] = _build_checkmate_diagram(board)
 
     # Engine evaluation (optional)
     if engine and engine.available:

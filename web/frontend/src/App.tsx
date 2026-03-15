@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Markdown from "react-markdown";
 import { ChessBoard } from "./components/Board/ChessBoard";
 import { EvalBar } from "./components/Board/EvalBar";
-import { tacticsToTaggedShapes, filterShapes } from "./components/Board/arrows";
+import { tacticsToTaggedShapes, filterShapes, checkmateDiagramShapes } from "./components/Board/arrows";
 import { PositionInput } from "./components/Input/PositionInput";
 import { AnalysisPanel } from "./components/Analysis/AnalysisPanel";
 import { MoveList } from "./components/Timeline/MoveList";
@@ -212,10 +212,13 @@ function App() {
     return tacticsToTaggedShapes(analysis.tactics);
   }, [analysis]);
 
-  const shapes = useMemo(
-    () => filterShapes(taggedShapes, showWhiteThreats, showBlackThreats),
-    [taggedShapes, showWhiteThreats, showBlackThreats],
-  );
+  const shapes = useMemo(() => {
+    // Checkmate: show only the mating pattern, not tactical noise
+    if (analysis?.is_checkmate && (analysis as any).checkmate_diagram) {
+      return checkmateDiagramShapes((analysis as any).checkmate_diagram);
+    }
+    return filterShapes(taggedShapes, showWhiteThreats, showBlackThreats);
+  }, [analysis, taggedShapes, showWhiteThreats, showBlackThreats]);
 
   const scoreCp = analysis?.engine?.eval?.score_cp ?? null;
   const mateIn = analysis?.engine?.eval?.mate_in ?? null;

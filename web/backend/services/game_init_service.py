@@ -72,18 +72,10 @@ def _evaluate_all_sync(
 
         board = chess.Board(fen)
         multi = engine.evaluate_multipv(board, num_lines=lines, depth=depth)
-        single = engine.evaluate_position(board, depth=depth)
 
-        # Override single-PV with multi-PV top line for consistency
-        # (same logic as chess_pipeline.evaluate_position)
-        if single and multi and len(multi) > 0:
-            top = multi[0]
-            single["best_move"] = top.get("best_move", single.get("best_move"))
-            single["best_move_uci"] = top.get("best_move_uci", single.get("best_move_uci"))
-            single["score_cp"] = top.get("score_cp", single.get("score_cp"))
-            single["score_display"] = top.get("score_display", single.get("score_display"))
-            single["pv"] = top.get("pv", single.get("pv"))
-            single["pv_uci"] = top.get("pv_uci", single.get("pv_uci"))
+        # Use multi-PV top line as the single-PV equivalent — one call
+        # instead of two, since single-PV was always overridden anyway.
+        single = multi[0] if multi and len(multi) > 0 else None
 
         results[fen] = {"eval": single, "top_lines": multi}
 
@@ -155,7 +147,10 @@ async def initialize_game(
 
     async def _run_eval() -> dict[str, dict]:
         def _worker():
-            with EngineEval() as engine:
+            # Use more resources for bulk evaluation — 2 threads and 256MB hash
+            # gives Stockfish better transposition table reuse across sequential
+            # positions while leaving cores free for the rest of the app.
+            with EngineEval(threads=2, hash_mb=256) as engine:
                 if not engine.available:
                     return {}
                 return _evaluate_all_sync(engine, fens, depth, lines, _progress_callback)

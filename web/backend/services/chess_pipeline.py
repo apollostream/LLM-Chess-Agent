@@ -45,19 +45,10 @@ def evaluate_position(fen: str, depth: int = 20, lines: int = 3) -> dict | None:
     board = chess.Board(fen)
     with EngineEval() as engine:
         result = engine.evaluate_multipv(board, num_lines=lines, depth=depth)
-        single = engine.evaluate_position(board, depth=depth)
 
-    # Multi-PV ranking is more reliable than single-PV for "best move".
-    # Override single-PV best move/score/PV with top_lines[0] so all
-    # consumers (frontend, guide prompts, synopsis) see consistent data.
-    if single and result and len(result) > 0:
-        top = result[0]
-        single["best_move"] = top.get("best_move", single.get("best_move"))
-        single["best_move_uci"] = top.get("best_move_uci", single.get("best_move_uci"))
-        single["score_cp"] = top.get("score_cp", single.get("score_cp"))
-        single["score_display"] = top.get("score_display", single.get("score_display"))
-        single["pv"] = top.get("pv", single.get("pv"))
-        single["pv_uci"] = top.get("pv_uci", single.get("pv_uci"))
+    # Use multi-PV top line as single-PV equivalent — one call instead of
+    # two, since single-PV was always overridden by multi-PV[0] anyway.
+    single = result[0] if result and len(result) > 0 else None
 
     return {
         "eval": single,

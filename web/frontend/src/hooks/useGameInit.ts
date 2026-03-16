@@ -15,6 +15,7 @@ export interface GameInitState {
   progress: GameInitProgress | null;
   moments: CriticalMoment[];
   momentsAll: CriticalMoment[];
+  positions: number;
   cached: boolean;
   error: string | null;
 }
@@ -31,6 +32,7 @@ const INITIAL_STATE: GameInitState = {
   progress: null,
   moments: [],
   momentsAll: [],
+  positions: 0,
   cached: false,
   error: null,
 };
@@ -112,15 +114,16 @@ export function useGameInit(): [GameInitState, GameInitActions] {
                     gameId: event.game_id,
                   }));
                 } else if (event.type === "done") {
-                  setState({
+                  setState((prev) => ({
                     status: "ready",
                     gameId: event.game_id,
                     progress: null,
                     moments: event.moments as CriticalMoment[],
                     momentsAll: event.moments_all as CriticalMoment[],
-                    cached: false,
+                    positions: event.positions,
+                    cached: prev.cached,
                     error: null,
-                  });
+                  }));
                 } else if (event.type === "error") {
                   setState((prev) => ({
                     ...prev,

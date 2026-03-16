@@ -310,16 +310,16 @@ function App() {
               {gameInitState.status === "evaluating" && gameInitState.progress && (
                 <div className="analysis-loading pulse" style={{ fontSize: 12 }}>
                   {gameInitState.progress.phase === "engine" &&
-                    `Evaluating positions ${gameInitState.progress.current}/${gameInitState.progress.total}...`}
+                    `Evaluating position ${gameInitState.progress.current}/${gameInitState.progress.total}...`}
                   {gameInitState.progress.phase === "moments" &&
                     `Detecting critical moments...`}
                   {gameInitState.progress.phase === "parse" &&
-                    `Parsing PGN...`}
+                    `Parsed ${gameInitState.progress.total} positions...`}
                 </div>
               )}
               {gameInitState.status === "ready" && gameInitState.cached && (
                 <div className="analysis-loading" style={{ fontSize: 12, color: "var(--success)" }}>
-                  Loaded from cache
+                  Loaded {gameInitState.positions} positions from cache
                 </div>
               )}
               {gameInitState.status === "error" && gameInitState.error && (

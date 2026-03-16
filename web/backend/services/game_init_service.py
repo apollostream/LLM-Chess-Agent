@@ -18,7 +18,7 @@ import chess.pgn
 from config import GAME_INIT_DEPTH_DEFAULT, GAME_INIT_LINES_DEFAULT, SCRIPTS_DIR
 from services import game_store
 from services.agent_service import _sse
-from services.cache import analysis_cache, engine_cache
+from services.cache import agent_cache, analysis_cache, engine_cache
 
 # Add scripts dir for engine_eval and game_narrative imports
 _scripts_str = str(SCRIPTS_DIR)
@@ -128,6 +128,7 @@ async def initialize_game(
         game_store.active_game = cached
         analysis_cache.clear()
         engine_cache.clear()
+        agent_cache.clear()
         yield _sse({
             "type": "cached",
             "game_id": hash_value[:12],

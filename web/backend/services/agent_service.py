@@ -25,7 +25,7 @@ from claude_code_sdk.types import (
 
 from config import PROJECT_ROOT
 
-_GUIDE_PROMPT = """Analyze this chess position using Silman's imbalance framework: {fen}
+_GUIDE_PROMPT = """Analyze this chess position using the Implicative Reasoning Playbook: {fen}
 
 Pre-computed analysis and engine evaluation are provided below — use them as your data source, do NOT re-run parse_position.sh.
 
@@ -36,12 +36,41 @@ IMPORTANT SCORE CONVENTION: Engine scores are ALWAYS from White's perspective. P
 
 IMPORTANT: When discussing candidate moves, plans, or tactical lines, you MUST ground your analysis in the engine's principal variations above. Do not propose moves or continuations that contradict the engine evaluation. Reference specific PV lines when relevant.
 
-When citing evaluation scores, quote the EXACT score_display values from the engine data above — do not round, interpolate, or approximate. For example, if top_lines[0] shows score_display "+38.18", write "+38.18", not "+7.49" or "roughly +38".
-
-Synthesize a coach-style Player's Guide: explain the key imbalances, who stands better, and recommend concrete plans for the side to move.
+When citing evaluation scores, quote the EXACT score_display values from the engine data above — do not round, interpolate, or approximate.
 
 Analysis data:
-{analysis_json}"""
+{analysis_json}
+{pv_context}
+
+=== IMPLICATIVE REASONING PLAYBOOK ===
+
+Follow this algorithm to explain WHY the engine's top move is best:
+
+1. POSITION ASSESSMENT: Identify the top 2-3 imbalances favoring each side. State who stands better and the position's character (static vs dynamic).
+
+2. HUB FEATURE CHANGES: From the PV deltas above, identify the most significant changes in material, initiative, pawn count, dynamic/static score, and space. These explain the primary strategic effect of the engine's recommendation.
+
+3. TACTICAL MOTIF ANALYSIS: Compare tactical motifs at P₀ vs the PV endpoint. For EACH motif that changed:
+   - Name the specific motif (fork, pin, skewer, discovered attack, etc.)
+   - Identify the pieces and squares involved (from the tactical analysis data)
+   - Classify: is this threat CREATION, ELIMINATION, CONVERSION, or PROPHYLAXIS?
+
+4. DEPENDENCY CHAINS: Trace how hub changes produce downstream effects:
+   - Initiative ↑ → fork/check/skewer threats emerge simultaneously (empirical: they co-move)
+   - Pawn captured → file opens → rook activation
+   - Material gain → board control shifts
+   - Development ↑ → dynamism increases, opponent's dynamism decreases
+
+5. GAME PHASE CONTEXT: Weight your analysis appropriately:
+   - Opening: emphasize development, center control, castling
+   - Middlegame: emphasize initiative, tactical motifs, king safety
+   - Endgame: emphasize passed pawns, king activity, pawn structure
+
+6. SYNTHESIZE: Write a coach-style Player's Guide explaining:
+   - The current position assessment (imbalances, who stands better)
+   - WHY the engine's move is best (grounded in feature deltas and tactical changes)
+   - The concrete plan for the side to move (referencing specific PV lines)
+   - If the eval swing greatly exceeds what positional features explain, acknowledge deep tactical content"""
 
 _DEEP_PROMPT = """Perform a deep BFIH analysis of this position: {fen}
 
@@ -120,12 +149,26 @@ async def stream_agent(
     Yields SSE-formatted strings: "data: {json}\\n\\n"
     """
     if mode == "guide":
+        # Compute PV context (feature deltas + tactical motif details)
+        pv_context_str = ""
+        if fen and analysis_json and engine_json:
+            try:
+                from services.chess_pipeline import compute_pv_context
+                import json as _json
+                analysis_dict = _json.loads(analysis_json)
+                pv_ctx = compute_pv_context(fen, analysis_dict, engine_json)
+                if pv_ctx:
+                    pv_context_str = "\n" + pv_ctx
+            except Exception:
+                pass  # Fall back to prompt without PV context
+
         prompt = _GUIDE_PROMPT.format(
             fen=fen,
             analysis_json=analysis_json or "{}",
             engine_json=engine_json or "{}",
             depth=depth,
             lines=lines,
+            pv_context=pv_context_str,
         )
     elif mode == "deep":
         prompt = _DEEP_PROMPT.format(fen=fen, analysis_json=analysis_json or "{}")

@@ -44,6 +44,9 @@ class AgentCache:
     def put(self, *parts: str, value: str) -> None:
         self._store[self._key(*parts)] = value
 
+    def clear(self) -> None:
+        self._store.clear()
+
 
 # Module-level singletons
 analysis_cache = AnalysisCache()

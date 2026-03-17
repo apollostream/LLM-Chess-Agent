@@ -852,12 +852,14 @@ def analyze_initiative(board: chess.Board, development: dict,
                 if board.is_capture(move):
                     captures += 1
         else:
-            # Approximate from tactics threats for the non-moving side
-            threats = tactics.get("threats", {})
-            for key in threats:
-                for t in threats[key]:
-                    if isinstance(t, dict) and t.get("side") == color_name:
-                        captures += 1
+            # Flip the board to count opponent's checks and captures
+            opp_board = board.copy()
+            opp_board.turn = not board.turn
+            for move in opp_board.legal_moves:
+                if opp_board.gives_check(move):
+                    checks += 1
+                if opp_board.is_capture(move):
+                    captures += 1
 
         # Threats count from tactics
         threat_count = 0

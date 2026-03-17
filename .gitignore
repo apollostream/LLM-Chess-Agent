@@ -8,4 +8,17 @@ build/
 .eggs/
 *.so
 .pytest_cache/
+node_modules/
+
+# Analysis outputs (generated, large)
 analysis/*.md
+analysis/*.png
+analysis/*.svg
+analysis/*.csv
+analysis/*.html
+analysis/*.tex
+analysis/*.log
+analysis/game_cache/
+analysis/downloads/
+analysis/sampled/
+analysis/bfih_phases/

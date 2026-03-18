@@ -27,7 +27,7 @@ from config import PROJECT_ROOT
 
 _GUIDE_PROMPT = """Analyze this chess position using the Implicative Reasoning Playbook: {fen}
 
-Pre-computed analysis and engine evaluation are provided below — use them as your data source, do NOT re-run parse_position.sh.
+Pre-computed imbalances, tactical motifs, and engine evaluation are provided below — use them as your source, do NOT re-run parse_position.sh.
 
 Engine evaluation (Stockfish depth {depth}, top {lines} lines):
 {engine_json}
@@ -36,9 +36,9 @@ IMPORTANT SCORE CONVENTION: Engine scores are ALWAYS from White's perspective. P
 
 IMPORTANT: When discussing candidate moves, plans, or tactical lines, you MUST ground your analysis in the engine's principal variations above. Do not propose moves or continuations that contradict the engine evaluation. Reference specific PV lines when relevant.
 
-When citing evaluation scores, quote the EXACT score_display values from the engine data above — do not round, interpolate, or approximate.
+When citing evaluation scores, quote the EXACT score_display values from the engine evaluation above — do not round, interpolate, or approximate.
 
-Analysis data:
+Imbalances and tactical motifs:
 {analysis_json}
 {pv_context}
 
@@ -52,7 +52,7 @@ Follow this algorithm to explain WHY the engine's top move is best:
 
 3. TACTICAL MOTIF ANALYSIS: Compare tactical motifs at P₀ vs the PV endpoint. For EACH motif that changed:
    - Name the specific motif (fork, pin, skewer, discovered attack, etc.)
-   - Identify the pieces and squares involved (from the tactical analysis data)
+   - Identify the pieces and squares involved (from the tactical motifs)
    - Classify: is this threat CREATION, ELIMINATION, CONVERSION, or PROPHYLAXIS?
 
 4. DEPENDENCY CHAINS: Trace how hub changes produce downstream effects:
@@ -76,7 +76,7 @@ _DEEP_PROMPT = """Perform a deep BFIH analysis of this position: {fen}
 
 Use --deep mode. Follow the full 9-phase BFIH protocol as defined in SKILL.md.
 
-Pre-computed analysis data:
+Pre-computed imbalances and tactical motifs:
 {analysis_json}"""
 
 _SYNTHESIS_PROMPT = """Compose a Game Synopsis for this chess game.

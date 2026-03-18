@@ -36,15 +36,22 @@ def analyze_position(fen: str, use_engine: bool = False,
     return board_utils.analyze_position(board)
 
 
-def analyze_pv_endpoint(fen: str, pv_uci: list[str]) -> dict | None:
+def analyze_pv_endpoint(fen: str, pv_moves: list[str]) -> dict | None:
     """Play PV moves from FEN and analyze the endpoint position.
 
+    Accepts moves in UCI or SAN notation (auto-detected).
     Returns full analyze_position() output at the PV endpoint, or None on error.
     """
     try:
         board = chess.Board(fen)
-        for uci in pv_uci:
-            board.push(chess.Move.from_uci(uci))
+        for move_str in pv_moves:
+            try:
+                move = chess.Move.from_uci(move_str)
+                if move not in board.legal_moves:
+                    raise ValueError
+            except (chess.InvalidMoveError, ValueError):
+                move = board.parse_san(move_str)
+            board.push(move)
         return board_utils.analyze_position(board)
     except Exception:
         return None
@@ -115,63 +122,164 @@ def _tier_label(key: str) -> tuple[int, str]:
 
 
 def _format_tactical_motifs(analysis: dict, perspective: str) -> str:
-    """Format raw tactical motif details from an analysis dict."""
+    """Format raw tactical motif details from an analysis dict.
+
+    Each motif type has its own key schema (see tactical_motifs.py);
+    this function maps each one explicitly rather than using generic keys.
+    """
     tac = analysis.get("tactics", {})
     lines = []
 
     static = tac.get("static", {})
-    for category, label in [
-        ("pins", "Pins"), ("batteries", "Batteries"),
-        ("hanging_pieces", "Hanging pieces"), ("trapped_pieces", "Trapped pieces"),
-        ("x_rays", "X-rays"),
-    ]:
-        items = static.get(category, [])
-        if items:
-            descs = []
-            for item in items[:5]:  # limit to 5 per type
-                if isinstance(item, dict):
-                    parts = []
-                    if "attacker" in item:
-                        parts.append(item["attacker"])
-                    if "type" in item:
-                        parts.append(f"({item['type']})")
-                    if "square" in item:
-                        parts.append(f"on {item['square']}")
-                    if "target" in item:
-                        parts.append(f"→ {item['target']}")
-                    descs.append(" ".join(parts))
-                else:
-                    descs.append(str(item))
-            lines.append(f"  {label}: {'; '.join(descs)}")
 
+    # Pins: pinner, pinned_piece, pinned_to, pin_type, pinned_side
+    pins = static.get("pins", [])
+    if pins:
+        descs = []
+        for p in pins[:5]:
+            if isinstance(p, dict):
+                descs.append(
+                    f"{p.get('pinner', '?')} pins {p.get('pinned_piece', '?')}"
+                    f" to {p.get('pinned_to', '?')} ({p.get('pin_type', '?')})"
+                )
+            else:
+                descs.append(str(p))
+        lines.append(f"  Pins: {'; '.join(descs)}")
+
+    # Batteries: pieces (list), line, side
+    batteries = static.get("batteries", [])
+    if batteries:
+        descs = []
+        for b in batteries[:5]:
+            if isinstance(b, dict):
+                pieces = b.get("pieces", [])
+                descs.append(f"{' + '.join(pieces)} ({b.get('line', '?')}) [{b.get('side', '')}]")
+            else:
+                descs.append(str(b))
+        lines.append(f"  Batteries: {'; '.join(descs)}")
+
+    # X-rays: attacker, through, target, side (key is "xray_attacks")
+    xrays = static.get("xray_attacks", []) or static.get("x_rays", [])
+    if xrays:
+        descs = []
+        for x in xrays[:5]:
+            if isinstance(x, dict):
+                descs.append(
+                    f"{x.get('attacker', '?')} through {x.get('through', '?')}"
+                    f" → {x.get('target', '?')} [{x.get('side', '')}]"
+                )
+            else:
+                descs.append(str(x))
+        lines.append(f"  X-rays: {'; '.join(descs)}")
+
+    # Hanging pieces: piece, square, side, type, lowest_attacker_value
+    hanging = static.get("hanging_pieces", [])
+    if hanging:
+        descs = []
+        for h in hanging[:5]:
+            if isinstance(h, dict):
+                descs.append(f"{h.get('piece', '?')} ({h.get('type', '?')}) [{h.get('side', '')}]")
+            else:
+                descs.append(str(h))
+        lines.append(f"  Hanging pieces: {'; '.join(descs)}")
+
+    # Trapped pieces: piece, square, side
+    trapped = static.get("trapped_pieces", [])
+    if trapped:
+        descs = []
+        for t in trapped[:5]:
+            if isinstance(t, dict):
+                descs.append(f"{t.get('piece', t.get('trapped_piece', '?'))} [{t.get('side', '')}]")
+            else:
+                descs.append(str(t))
+        lines.append(f"  Trapped pieces: {'; '.join(descs)}")
+
+    # Weak back rank: list of side strings
+    back_rank = static.get("weak_back_rank", [])
+    if back_rank:
+        lines.append(f"  Weak back rank: {', '.join(str(s) for s in back_rank)}")
+
+    # Threats and opponent threats
     for threat_key, threat_label in [("threats", perspective), ("opponent_threats", f"opponent of {perspective}")]:
         threats = tac.get(threat_key, {})
-        for category, label in [
-            ("forks", "Fork threats"), ("skewers", "Skewer threats"),
-            ("discovered_attacks", "Discovered attacks"),
-            ("checkmate_threats", "Checkmate threats"),
-        ]:
-            items = threats.get(category, [])
-            if items:
-                descs = []
-                for item in items[:5]:
-                    if isinstance(item, dict):
-                        parts = []
-                        if "attacker" in item:
-                            parts.append(item["attacker"])
-                        if "square" in item:
-                            parts.append(f"on {item['square']}")
-                        targets = item.get("targets", [])
-                        if targets:
-                            parts.append(f"→ {', '.join(str(t) for t in targets[:3])}")
-                        elif "target" in item:
-                            parts.append(f"→ {item['target']}")
-                        if "side" in item:
-                            parts.append(f"[{item['side']}]")
-                        descs.append(" ".join(parts))
-                    else:
-                        descs.append(str(item))
-                lines.append(f"  {label} ({threat_label}): {'; '.join(descs)}")
+
+        # Forks: forking_piece, landing_square, targets (list), move, side
+        forks = threats.get("forks", [])
+        if forks:
+            descs = []
+            for f in forks[:5]:
+                if isinstance(f, dict):
+                    move = f.get("move", "")
+                    piece = f.get("forking_piece", f.get("attacker", "?"))
+                    sq = f.get("landing_square", f.get("square", ""))
+                    targets = f.get("targets", [])
+                    target_str = ", ".join(str(t) for t in targets[:4])
+                    descs.append(f"{move}: {piece} on {sq} → {target_str}")
+                else:
+                    descs.append(str(f))
+            lines.append(f"  Fork threats ({threat_label}): {'; '.join(descs)}")
+
+        # Skewers: move, skewering_piece, front_target, rear_target, side
+        skewers = threats.get("skewers", [])
+        if skewers:
+            descs = []
+            for s in skewers[:5]:
+                if isinstance(s, dict):
+                    move = s.get("move", "?")
+                    piece = s.get("skewering_piece", s.get("attacker", "?"))
+                    front = s.get("front_target", "?")
+                    rear = s.get("rear_target", "?")
+                    descs.append(f"{move}: {piece} skewers {front} → {rear}")
+                else:
+                    descs.append(str(s))
+            lines.append(f"  Skewer threats ({threat_label}): {'; '.join(descs)}")
+
+        # Discovered attacks: move, moving_piece, revealed_attacker, target, side
+        disc = threats.get("discovered_attacks", [])
+        if disc:
+            descs = []
+            for d in disc[:5]:
+                if isinstance(d, dict):
+                    move = d.get("move", "?")
+                    revealed = d.get("revealed_attacker", d.get("attacker", "?"))
+                    target = d.get("target", "?")
+                    descs.append(f"{move}: reveals {revealed} → {target}")
+                else:
+                    descs.append(str(d))
+            lines.append(f"  Discovered attacks ({threat_label}): {'; '.join(descs)}")
+
+        # Checkmate threats: move, type/details
+        mates = threats.get("checkmate_threats", [])
+        if mates:
+            descs = []
+            for m in mates[:5]:
+                if isinstance(m, dict):
+                    descs.append(f"{m.get('move', '?')}")
+                else:
+                    descs.append(str(m))
+            lines.append(f"  Checkmate threats ({threat_label}): {'; '.join(descs)}")
+
+        # Removal of guard: move, captured_guard, exposed_piece, side
+        rog = threats.get("removal_of_guard", [])
+        if rog:
+            descs = []
+            for r in rog[:5]:
+                if isinstance(r, dict):
+                    descs.append(
+                        f"{r.get('move', '?')}: captures {r.get('captured_guard', '?')},"
+                        f" exposing {r.get('exposed_piece', '?')}"
+                    )
+                else:
+                    descs.append(str(r))
+            lines.append(f"  Removal of guard ({threat_label}): {'; '.join(descs)}")
+
+        # Back rank mates
+        brm = threats.get("back_rank_mates", [])
+        if brm:
+            descs = []
+            for m in brm[:3]:
+                descs.append(m.get("move", str(m)) if isinstance(m, dict) else str(m))
+            lines.append(f"  Back rank mates ({threat_label}): {'; '.join(descs)}")
 
     return "\n".join(lines) if lines else "  (none detected)"
 
@@ -192,7 +300,7 @@ def compute_pv_context(fen: str, analysis_p0: dict, engine_json_str: str) -> str
     if not top_lines:
         return None
 
-    pv_moves = top_lines[0].get("pv", [])
+    pv_moves = top_lines[0].get("pv_uci") or top_lines[0].get("pv", [])
     if not pv_moves:
         return None
 
@@ -262,7 +370,7 @@ def compute_pv_context(fen: str, analysis_p0: dict, engine_json_str: str) -> str
 
     # Assemble output
     parts = []
-    parts.append(f"\n=== PV ANALYSIS: IMPLICATIVE REASONING DATA ===")
+    parts.append(f"\n=== PV ANALYSIS: IMBALANCES & TACTICAL MOTIFS ===")
     parts.append(f"PV ({len(pv_moves)} half-moves): {' '.join(pv_san)}")
     parts.append(f"PV endpoint FEN: {pv_fen}")
     parts.append(f"Perspective: {stm_color} (side to move at P₀)")

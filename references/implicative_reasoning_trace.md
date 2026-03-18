@@ -1,6 +1,6 @@
 # Implicative Reasoning Pipeline Trace
 
-How the General Theory of Strong Chess Playing is implemented: which deterministic functions produce evidence, and how the LLM applies structured reasoning to explain engine hypotheses.
+A methodology for producing LLM-generated explanations of engine-recommended chess moves, grounded in deterministically-computed positional evidence. This document traces which functions produce evidence, how the LLM applies structured reasoning to explain engine hypotheses, what the epistemological status of each component is, and what experiments are needed to validate the claims.
 
 ## The Pipeline in One Diagram
 
@@ -105,7 +105,7 @@ The boundary is sharp and deliberate:
 
 3. **The LLM's contribution is exactly the _implicative reasoning_ itself** — connecting evidence to hypothesis. The deterministic layer answers "what changed?" (deltas) and "what exists?" (motifs). The LLM answers "why does this explain the engine's recommendation?" That's the part that requires understanding chess concepts like "a pin on the f-file restricts the king's escape" — but it's constrained to reason _from_ the pipeline's evidence, not from training data memory.
 
-4. **The vectorizer + delta computation implement the "state transition" part of the General Theory.** `vectorize_stm()` at P₀ and Pₙ produces two state vectors; subtraction gives the transition. The 4-tier hierarchy (empirically derived from the precision matrix analysis) tells the LLM which changes have the broadest explanatory reach — hubs first, then tactical, then bridge, then structural.
+4. **The vectorizer + delta computation implement the "state transition" part of the methodology.** `vectorize_stm()` at P₀ and Pₙ produces two state vectors; subtraction gives the transition. The 4-tier hierarchy (empirically derived from the precision matrix analysis) tells the LLM which changes have the broadest explanatory reach — hubs first, then tactical, then bridge, then structural.
 
 ## The 4-Tier Hierarchy: Empirical Foundations
 
@@ -188,7 +188,7 @@ The empirical structure dictates Step 2 of the Playbook prompt — **"HUB FEATUR
 
 ### The Epistemological Point
 
-This is what makes the Theory empirically grounded rather than just "chess intuition formalized":
+This is what makes the methodology empirically grounded rather than just "chess intuition formalized":
 
 - **The feature set** (Silman's 10 imbalances + 19 tactical motifs) is the **ontology** — a human-designed categorization of chess-relevant concepts. This is a design choice, not an empirical discovery.
 
@@ -196,7 +196,7 @@ This is what makes the Theory empirically grounded rather than just "chess intui
 
 - **The reasoning algorithm** (6-step Playbook) **operationalizes the empirical structure** — it tells the LLM to traverse the dependency graph in the order that maximizes explanatory coverage: hubs first, then their tactical descendants, then bridges, then structural details.
 
-The precision matrix is symmetric (no causal direction without temporal ordering), and the Gaussian assumption misses nonlinear chess interactions (R² = 0.779 leaves 22% unexplained). These are honest limitations documented in the analysis. The framework is explanatory (why a move is good), not predictive (which move is best) — Stockfish provides the prediction, the Theory provides the explanation.
+The precision matrix is symmetric (no causal direction without temporal ordering), and the Gaussian assumption misses nonlinear chess interactions (R² = 0.779 leaves 22% unexplained). These are honest limitations documented in the analysis. The framework is explanatory (why a move is good), not predictive (which move is best) — Stockfish provides the prediction, the methodology provides the explanation.
 
 ## Where the Formatter Fix Mattered
 
@@ -211,3 +211,147 @@ In the context of the implicative reasoning framework:
 - **"Evidence"** — collectively, imbalances and tactical motifs when used in the reasoning process to support hypotheses about good moves
 - **"Hypothesis"** — the engine's recommended best move (from Stockfish multi-PV)
 - **"Data"** — reserved strictly for corpus/database contexts (e.g., "precision matrix computed from game data", "frequency of this motif in the data"); never used for imbalances or tactical motifs in analysis output
+
+## Epistemological Status: What This Is and Is Not
+
+This work is not a "theory" in the scientific sense. A theory makes falsifiable predictions about phenomena — general relativity predicts gravitational lensing, evolution predicts nested hierarchies in DNA. This framework does not predict which move is best (Stockfish does that); it prescribes a reasoning process for explaining *why* the best move is best. It is **normative**, not **descriptive**.
+
+### What each component actually is
+
+| What we might call it | What it actually is | Proper term |
+|---|---|---|
+| "General Theory" | A prescribed reasoning procedure | **Methodology** |
+| "Imbalances + tactical motifs" | A chosen categorization of chess-relevant concepts | **Ontology** |
+| "4-tier hierarchy" | A statistical finding about the ontology | **Empirical result** |
+| "The pipeline" | A system enforcing evidence-grounded reasoning | **Architecture** |
+| "Implicative reasoning" | Connecting evidence to hypotheses via structured steps | **Reasoning framework** |
+
+### What's novel
+
+**Potentially novel — the specific combination of:**
+- Deterministic feature extraction → precision matrix hierarchy discovery → LLM structured reasoning with empirically-derived traversal order
+- PV-endpoint delta analysis (computing how the full imbalance/tactical state vector changes along the engine's recommended line)
+- The sharp, enforced boundary between evidence production (Python) and reasoning (LLM)
+
+**NOT novel — prior art exists for each component in isolation:**
+- Chess feature extraction from board state — decades old (evaluation functions in Arasan, Stockfish classical, etc.)
+- Silman's imbalance framework — published 1993
+- Graphical Lasso / precision matrices — Friedman, Hastie, Tibshirani 2008
+- LLMs analyzing chess — widespread since GPT-3
+- Explainable AI for game-playing agents — published work exists (see `references/literature_survey/`)
+- Engine-grounded analysis — standard in chess software (ChessBase, Lichess)
+
+### The honest question
+
+Is the combination novel enough to constitute a contribution, or is this a well-engineered integration of known techniques? The answer depends on the experimental results below.
+
+### What it is in philosophy-of-science terms
+
+This is closest to a **research programme** in Lakatos's sense — a core set of methodological commitments surrounded by a testable protective belt:
+
+- **Core commitment** (not falsifiable — it's a methodological choice): chess positions can be explained via structured imbalance/tactical reasoning, with evidence produced deterministically and reasoning performed by an LLM constrained by a structured algorithm.
+
+- **Protective belt** (falsifiable — each can be tested): the precision matrix hierarchy is stable; the tier ordering improves explanation quality; the evidence actually grounds the LLM's reasoning rather than decorating training-data recall; the resulting explanations are useful to chess players.
+
+The core commitment is a way of *organizing* explanation. The belt is where scientific claims live — and where experimental validation is needed.
+
+### What a paper would honestly claim
+
+Not "we have a theory of chess." Rather:
+
+> *We present a methodology for producing LLM-generated explanations of engine-recommended chess moves, grounded in deterministically-computed positional evidence. The reasoning order is empirically derived from the conditional independence structure of 74 chess features across 28K position transitions. We demonstrate that this structured evidence-grounding produces explanations that [whatever the ablation study shows].*
+
+That is a systems/methodology contribution — publishable, honest, and defensible without overclaiming.
+
+## Experimental Validation Plan
+
+The following experiments are needed to test the falsifiable claims in the protective belt. They are ordered by priority — Experiments 1 and 2 are the minimum bar for credibility.
+
+### Experiment 1: Ablation Study (tests: does the evidence actually matter?)
+
+This is the single most important experiment. If the full pipeline doesn't significantly outperform no-evidence, the architecture adds engineering complexity without reasoning value.
+
+**Conditions:**
+- **A — Full pipeline**: Evidence + engine eval + PV deltas + tier ordering (current system)
+- **B — Engine only**: Stockfish multi-PV lines, no imbalances, no tactical motifs, no deltas
+- **C — No evidence**: Just the FEN + "explain why the best move is best"
+- **D — Evidence, scrambled tiers**: Same evidence as A, but feature deltas in random order (no tier grouping)
+
+**Metric:** Blind expert rating on a rubric:
+- Factual accuracy of cited motifs (do the pins/forks/skewers mentioned actually exist?)
+- Coverage of key themes (does the explanation address the position's main features?)
+- Coherence of reasoning chain (does the explanation flow logically from evidence to conclusion?)
+- Actionable advice (would a player know what to do after reading it?)
+
+**Sample:** 50+ positions from games definitively after the LLM's training cutoff (eliminates training-data confound).
+
+**Falsification criterion:** If Condition A does not materially outperform Condition C, the pipeline evidence is decorative — the LLM is reasoning from training data, not from the computed evidence.
+
+### Experiment 2: Evidence Corruption (tests: is the grounding real?)
+
+**Design:** Give the LLM *wrong* tactical motifs — report a pin that doesn't exist, omit a fork that does, fabricate a skewer.
+
+**Key question:** Does the narrative faithfully reason from the corrupted evidence? Or does it silently correct using training data?
+
+- **If it faithfully follows corrupted evidence:** The grounding claim holds (the LLM is genuinely reasoning from the evidence). But this raises garbage-in-garbage-out concerns — the pipeline's correctness becomes critical.
+- **If it silently corrects:** The evidence isn't actually grounding the reasoning — training data is. The pipeline is decorative.
+
+**Sample:** 20+ positions with systematically corrupted evidence (additions, deletions, substitutions).
+
+### Experiment 3: Precision Matrix Stability (tests: is the hierarchy robust?)
+
+**Design:** Recompute the precision matrix on different subsets and corpora:
+- TCEC games only (super-engine)
+- Super-GM games only (2500+ ELO)
+- Intermediate games only (~1200–1500 ELO)
+- 250 entirely different games
+- Bootstrap confidence intervals on node degrees
+
+**Key question:** Is "material_advantage = degree 14 hub" robust, or is it an artifact of this particular corpus? Does the tier structure (which features are hubs vs. structural) hold across different game populations?
+
+**Falsification criterion:** If tier assignments change substantially across corpora, the hierarchy is corpus-dependent and cannot be presented as a general structure of chess feature interaction.
+
+### Experiment 4: Tier Ordering Impact (tests: does the ordering help?)
+
+**Design:** Same positions, same evidence, but present feature deltas in:
+- **(a)** Hub-first (current system)
+- **(b)** Structural-first (reversed order)
+- **(c)** Random shuffle
+- **(d)** Flat (no tier labels, alphabetical)
+
+Blind expert comparison of resulting narratives.
+
+**Falsification criterion:** If ordering doesn't significantly affect explanation quality, the precision matrix hierarchy is descriptively interesting but not functionally load-bearing in the reasoning pipeline.
+
+### Experiment 5: Novel Position Test (eliminates training-data confound)
+
+**Design:** Use positions that are definitively NOT in any training corpus:
+- Games played after the LLM's knowledge cutoff
+- Synthetic positions constructed to have specific imbalance profiles that have never appeared in any game database
+
+This is the strongest test of genuine implicative reasoning vs. pattern matching from training data.
+
+### Experiment 6: Comparative Evaluation (tests: is the output useful?)
+
+**Design:** Compare against:
+- Raw Stockfish output with commentary (ChessBase-style)
+- Unstructured LLM analysis (Claude/GPT-4 with just a FEN, no pipeline)
+- Human IM/GM commentary on the same positions
+
+Blind panel of rated chess players rates all four on: insight, accuracy, actionability, coherence.
+
+**Key question:** Do chess players actually find pipeline-grounded explanations more useful than alternatives?
+
+### What the experiments could show
+
+**Best case:** Ablation shows full pipeline significantly outperforms no-evidence; corruption test shows LLM faithfully follows evidence; precision matrix is stable; tier ordering matters; experts prefer pipeline output. This validates the methodology and warrants a paper.
+
+**Worst case:** Ablation shows no difference; the LLM silently corrects corrupted evidence from training data; the pipeline is elegant engineering around a decorative evidence display. This is an important negative result — still publishable, but with very different conclusions.
+
+**The discomfort:** It is possible that the ablation shows the LLM produces equally good explanations without the pipeline evidence. That would mean the architecture is elegant but the evidence production is decorative. Intellectual honesty requires designing the experiment that could falsify the claim.
+
+### Implementation priority
+
+**Experiments 1 and 2 are the minimum bar** for any publication claim. They are implementable within this codebase — the infrastructure for running multiple conditions and capturing outputs already exists. If the results hold, the methodology has a defensible empirical foundation. If they don't, we learn something important and avoid publishing a flawed claim.
+
+Experiments 3–6 strengthen the paper but are not prerequisites for an initial systems contribution.

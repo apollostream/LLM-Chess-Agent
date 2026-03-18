@@ -133,72 +133,170 @@ def _eval_description(score: float) -> str:
 # ── Tactical motifs formatting ───────────────────────────────────────────────
 
 def _fmt_tactics_static(tac: dict) -> list[tuple[str, str]]:
-    """Return list of (pattern_name, details_html) for static patterns."""
+    """Return list of (pattern_name, details_html) for static patterns.
+
+    Each motif type maps to its own key schema from tactical_motifs.py.
+    """
     static = tac.get("static", {})
     rows = []
-    for key, label in [
-        ("pins", "Pins"), ("batteries", "Batteries"),
-        ("hanging_pieces", "Hanging pieces"), ("trapped_pieces", "Trapped pieces"),
-        ("x_rays", "X-rays"),
-    ]:
-        items = static.get(key, [])
-        if not items:
-            rows.append((label, "<em>none</em>"))
-            continue
+
+    # Pins: pinner, pinned_piece, pinned_to, pin_type, pinned_side
+    pins = static.get("pins", [])
+    if pins:
         descs = []
-        for item in items[:5]:
-            if isinstance(item, dict):
-                parts = []
-                if "attacker" in item:
-                    parts.append(item["attacker"])
-                if "type" in item:
-                    parts.append(f"({item['type']})")
-                if "square" in item:
-                    parts.append(f"on {item['square']}")
-                if "target" in item:
-                    parts.append(f"→ {item['target']}")
-                if "side" in item:
-                    parts.append(f"[{item['side']}]")
-                descs.append(" ".join(parts))
+        for p in pins[:5]:
+            if isinstance(p, dict):
+                descs.append(
+                    f"{p.get('pinner', '?')} pins {p.get('pinned_piece', '?')}"
+                    f" to {p.get('pinned_to', '?')} ({p.get('pin_type', '?')})"
+                )
             else:
-                descs.append(str(item))
-        rows.append((label, "<br>".join(descs)))
+                descs.append(str(p))
+        rows.append(("Pins", "<br>".join(descs)))
+    else:
+        rows.append(("Pins", "<em>none</em>"))
+
+    # Batteries: pieces (list), line, side
+    batteries = static.get("batteries", [])
+    if batteries:
+        descs = []
+        for b in batteries[:5]:
+            if isinstance(b, dict):
+                pieces = b.get("pieces", [])
+                descs.append(f"{' + '.join(pieces)} ({b.get('line', '?')}) [{b.get('side', '')}]")
+            else:
+                descs.append(str(b))
+        rows.append(("Batteries", "<br>".join(descs)))
+    else:
+        rows.append(("Batteries", "<em>none</em>"))
+
+    # Hanging pieces: piece, square, side, type
+    hanging = static.get("hanging_pieces", [])
+    if hanging:
+        descs = []
+        for h in hanging[:5]:
+            if isinstance(h, dict):
+                descs.append(f"{h.get('piece', '?')} ({h.get('type', '?')}) [{h.get('side', '')}]")
+            else:
+                descs.append(str(h))
+        rows.append(("Hanging pieces", "<br>".join(descs)))
+    else:
+        rows.append(("Hanging pieces", "<em>none</em>"))
+
+    # Trapped pieces
+    trapped = static.get("trapped_pieces", [])
+    if trapped:
+        descs = []
+        for t in trapped[:5]:
+            if isinstance(t, dict):
+                descs.append(f"{t.get('piece', t.get('trapped_piece', '?'))} [{t.get('side', '')}]")
+            else:
+                descs.append(str(t))
+        rows.append(("Trapped pieces", "<br>".join(descs)))
+    else:
+        rows.append(("Trapped pieces", "<em>none</em>"))
+
+    # X-rays: attacker, through, target, side (key is "xray_attacks")
+    xrays = static.get("xray_attacks", []) or static.get("x_rays", [])
+    if xrays:
+        descs = []
+        for x in xrays[:5]:
+            if isinstance(x, dict):
+                descs.append(
+                    f"{x.get('attacker', '?')} through {x.get('through', '?')}"
+                    f" → {x.get('target', '?')} [{x.get('side', '')}]"
+                )
+            else:
+                descs.append(str(x))
+        rows.append(("X-rays", "<br>".join(descs)))
+    else:
+        rows.append(("X-rays", "<em>none</em>"))
+
+    # Weak back rank
+    back_rank = static.get("weak_back_rank", [])
+    if back_rank:
+        rows.append(("Weak back rank", ", ".join(str(s) for s in back_rank)))
+
     return rows
 
 
 def _fmt_tactics_threats(tac: dict, perspective: str) -> list[tuple[str, str]]:
-    """Return list of (threat_name, details_html) for threats."""
+    """Return list of (threat_name, details_html) for threats.
+
+    Threats are 1-move-away attacks. The move notation (SAN) encodes
+    which piece moves to deliver the threat (e.g. Qc8 = queen to c8).
+    """
     rows = []
     for threat_key, threat_label in [("threats", perspective), ("opponent_threats", f"opponent of {perspective}")]:
         threats = tac.get(threat_key, {})
-        for cat, label in [
-            ("forks", "Fork threats"), ("skewers", "Skewer threats"),
-            ("discovered_attacks", "Disc. attacks"), ("checkmate_threats", "Mate threats"),
-        ]:
-            items = threats.get(cat, [])
-            if not items:
-                side_label = f" ({threat_label[0].upper()})" if "opponent" not in threat_key else f" ({threat_label[0].upper()})"
-                rows.append((f"{label} ({threat_label})", "<em>none</em>"))
-                continue
+
+        # Forks: move, forking_piece, landing_square, targets (list), side
+        forks = threats.get("forks", [])
+        if forks:
             descs = []
-            for item in items[:5]:
-                if isinstance(item, dict):
-                    parts = []
-                    if "attacker" in item:
-                        parts.append(item["attacker"])
-                    if "square" in item:
-                        parts.append(f"on {item['square']}")
-                    targets = item.get("targets", [])
-                    if targets:
-                        parts.append(f"→ {', '.join(str(t) for t in targets[:3])}")
-                    elif "target" in item:
-                        parts.append(f"→ {item['target']}")
-                    if "side" in item:
-                        parts.append(f"[{item['side']}]")
-                    descs.append(" ".join(parts))
+            for f in forks[:5]:
+                if isinstance(f, dict):
+                    move = f.get("move", "?")
+                    targets = f.get("targets", [])
+                    target_str = ", ".join(str(t) for t in targets[:4])
+                    descs.append(f"{move} → {target_str}")
                 else:
-                    descs.append(str(item))
-            rows.append((f"{label} ({threat_label})", "<br>".join(descs)))
+                    descs.append(str(f))
+            rows.append((f"Fork threats ({threat_label})", "<br>".join(descs)))
+
+        # Skewers: move, skewering_piece, front_target, rear_target, side
+        skewers = threats.get("skewers", [])
+        if skewers:
+            descs = []
+            for s in skewers[:5]:
+                if isinstance(s, dict):
+                    move = s.get("move", "?")
+                    piece = s.get("skewering_piece", "?")
+                    front = s.get("front_target", "?")
+                    rear = s.get("rear_target", "?")
+                    descs.append(f"{move}: {piece} skewers {front} → {rear}")
+                else:
+                    descs.append(str(s))
+            rows.append((f"Skewer threats ({threat_label})", "<br>".join(descs)))
+
+        # Discovered attacks: move, revealed_attacker, target, side
+        disc = threats.get("discovered_attacks", [])
+        if disc:
+            descs = []
+            for d in disc[:5]:
+                if isinstance(d, dict):
+                    move = d.get("move", "?")
+                    revealed = d.get("revealed_attacker", d.get("attacker", "?"))
+                    target = d.get("target", "?")
+                    descs.append(f"{move}: reveals {revealed} → {target}")
+                else:
+                    descs.append(str(d))
+            rows.append((f"Disc. attacks ({threat_label})", "<br>".join(descs)))
+
+        # Checkmate threats: move
+        mates = threats.get("checkmate_threats", [])
+        if mates:
+            descs = []
+            for m in mates[:5]:
+                if isinstance(m, dict):
+                    descs.append(f"{m.get('move', '?')}")
+                else:
+                    descs.append(str(m))
+            rows.append((f"Mate threats ({threat_label})", "<br>".join(descs)))
+
+        # Removal of guard: move, captured_guard, exposed_piece, side
+        rog = threats.get("removal_of_guard", [])
+        if rog:
+            descs = []
+            for r in rog[:5]:
+                if isinstance(r, dict):
+                    descs.append(
+                        f"{r.get('move', '?')}: captures {r.get('captured_guard', '?')},"
+                        f" exposing {r.get('exposed_piece', '?')}"
+                    )
+                else:
+                    descs.append(str(r))
+            rows.append((f"Removal of guard ({threat_label})", "<br>".join(descs)))
     return rows
 
 

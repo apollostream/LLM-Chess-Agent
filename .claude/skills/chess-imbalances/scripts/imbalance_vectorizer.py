@@ -412,12 +412,74 @@ STM_FEATURE_NAMES: list[str] = [
     "checkmate_threats_stm",
     "checkmate_threats_opp",
 
+    # ── Spatial context (STM-relative) ────────────────────────────
+    "region_center",            # center region control: stm(+1), neutral(0), opp(-1)
+    "region_stm_kingside",      # STM's kingside corner control
+    "region_stm_queenside",     # STM's queenside corner control
+    "region_opp_kingside",      # OPP's kingside corner control
+    "region_opp_queenside",     # OPP's queenside corner control
+    "stm_king_file",            # queenside(-1), center(0), kingside(+1)
+    "stm_king_rank",            # advanced(-1), center(0), home(+1)
+    "opp_king_file",            # queenside(-1), center(0), kingside(+1)
+    "opp_king_rank",            # advanced(-1), center(0), home(+1)
+
     # ── Game phase & context ─────────────────────────────────────
     "game_phase",
     "total_non_pawn_material",
     "is_check",
     "eval_advantage",           # engine eval from STM perspective (positive = ahead)
 ]
+
+
+def _compute_spatial_features(analysis: dict, is_white: bool) -> dict[str, int]:
+    """Compute 9 spatial context features (STM-relative).
+
+    5 regional control nodes + 4 king location nodes.
+    All values are ternary: -1, 0, or +1.
+    """
+    rc = analysis.get("regional_control", {})
+    regions = rc.get("regions", {})
+    king_locs = rc.get("king_locations", {})
+
+    if is_white:
+        # White is STM: white's home corners = STM corners, black's = OPP
+        # Region control values are already +1=white, -1=black from board_utils
+        # So for White STM: +1=stm, -1=opp → keep as-is
+        center = regions.get("center", 0)
+        stm_ks = regions.get("white_kingside", 0)
+        stm_qs = regions.get("white_queenside", 0)
+        opp_ks = regions.get("black_kingside", 0)
+        opp_qs = regions.get("black_queenside", 0)
+        # King locations: already from white/black perspective in board_utils
+        stm_kf = king_locs.get("white_king_file", 0)
+        stm_kr = king_locs.get("white_king_rank", 0)
+        opp_kf = king_locs.get("black_king_file", 0)
+        opp_kr = king_locs.get("black_king_rank", 0)
+    else:
+        # Black is STM: black's home corners = STM corners, white's = OPP
+        # Region control: flip sign (black control = +1 for STM)
+        center = -regions.get("center", 0)
+        stm_ks = -regions.get("black_kingside", 0)
+        stm_qs = -regions.get("black_queenside", 0)
+        opp_ks = -regions.get("white_kingside", 0)
+        opp_qs = -regions.get("white_queenside", 0)
+        # King locations: swap white/black and flip rank
+        stm_kf = king_locs.get("black_king_file", 0)
+        stm_kr = king_locs.get("black_king_rank", 0)
+        opp_kf = king_locs.get("white_king_file", 0)
+        opp_kr = king_locs.get("white_king_rank", 0)
+
+    return {
+        "region_center": center,
+        "region_stm_kingside": stm_ks,
+        "region_stm_queenside": stm_qs,
+        "region_opp_kingside": opp_ks,
+        "region_opp_queenside": opp_qs,
+        "stm_king_file": stm_kf,
+        "stm_king_rank": stm_kr,
+        "opp_king_file": opp_kf,
+        "opp_king_rank": opp_kr,
+    }
 
 
 def vectorize_stm(analysis: dict) -> dict[str, int | float]:
@@ -590,6 +652,9 @@ def vectorize_stm(analysis: dict) -> dict[str, int | float]:
         "discovered_attack_threats_opp": da_opp,
         "checkmate_threats_stm": cm_stm,
         "checkmate_threats_opp": cm_opp,
+
+        # ── Spatial context (STM-relative) ────────────────────────
+        **_compute_spatial_features(analysis, is_white),
 
         "game_phase": abs_v["game_phase"],
         "total_non_pawn_material": abs_v["total_non_pawn_material"],

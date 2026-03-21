@@ -1169,6 +1169,98 @@ def _build_checkmate_diagram(board: chess.Board) -> dict:
 
 # ── Main analysis ─────────────────────────────────────────────────────────────
 
+def analyze_regional_control(board: chess.Board) -> dict:
+    """Compute control of 5 board regions and king locations.
+
+    Regions (non-overlapping, STM-relative ranks applied at vectorization):
+      center:        files d,e × ranks 3,4,5,6 (absolute)
+      white_kingside:  files f,g,h × ranks 1,2,3
+      white_queenside: files a,b,c × ranks 1,2,3
+      black_kingside:  files f,g,h × ranks 6,7,8
+      black_queenside: files a,b,c × ranks 6,7,8
+
+    Returns absolute white/black perspective; vectorize_stm() handles the
+    STM-relative mapping.
+    """
+    # Define regions by (file_range, rank_range) using 0-indexed
+    regions = {
+        "center": (range(3, 5), range(2, 6)),         # d,e × ranks 3-6 (0-idx: 3,4 × 2,3,4,5)
+        "white_kingside": (range(5, 8), range(0, 3)),  # f,g,h × ranks 1-3
+        "white_queenside": (range(0, 3), range(0, 3)), # a,b,c × ranks 1-3
+        "black_kingside": (range(5, 8), range(5, 8)),  # f,g,h × ranks 6-8
+        "black_queenside": (range(0, 3), range(5, 8)), # a,b,c × ranks 6-8
+    }
+
+    # Compute attacked squares per side
+    white_attacks = set()
+    black_attacks = set()
+    for sq in chess.SQUARES:
+        piece = board.piece_at(sq)
+        if piece:
+            attacks = board.attacks(sq)
+            if piece.color == chess.WHITE:
+                white_attacks.update(attacks)
+            else:
+                black_attacks.update(attacks)
+
+    # Regional control: count attacked squares per side per region
+    region_control = {}
+    for region_name, (file_range, rank_range) in regions.items():
+        squares_in_region = [
+            chess.square(f, r) for f in file_range for r in rank_range
+        ]
+        w_count = sum(1 for sq in squares_in_region if sq in white_attacks)
+        b_count = sum(1 for sq in squares_in_region if sq in black_attacks)
+        # Ternary: +1 = white controls, -1 = black controls, 0 = neutral
+        if w_count > b_count:
+            region_control[region_name] = 1
+        elif b_count > w_count:
+            region_control[region_name] = -1
+        else:
+            region_control[region_name] = 0
+
+    # King locations (absolute squares)
+    wk = board.king(chess.WHITE)
+    bk = board.king(chess.BLACK)
+
+    def file_zone(sq):
+        """a,b,c → -1 (queenside), d,e → 0 (center), f,g,h → +1 (kingside)."""
+        f = chess.square_file(sq)
+        if f <= 2:
+            return -1
+        if f >= 5:
+            return 1
+        return 0
+
+    def rank_zone_white(sq):
+        """From White's perspective: ranks 1,2 → +1, 3-5 → 0, 6-8 → -1."""
+        r = chess.square_rank(sq)  # 0-indexed
+        if r <= 1:
+            return 1    # home
+        if r >= 5:
+            return -1   # advanced into opponent territory
+        return 0        # center
+
+    def rank_zone_black(sq):
+        """From Black's perspective: ranks 7,8 → +1, 4-6 → 0, 1-3 → -1."""
+        r = chess.square_rank(sq)  # 0-indexed
+        if r >= 6:
+            return 1    # home
+        if r <= 2:
+            return -1   # advanced into opponent territory
+        return 0        # center
+
+    return {
+        "regions": region_control,
+        "king_locations": {
+            "white_king_file": file_zone(wk) if wk is not None else 0,
+            "white_king_rank": rank_zone_white(wk) if wk is not None else 0,
+            "black_king_file": file_zone(bk) if bk is not None else 0,
+            "black_king_rank": rank_zone_black(bk) if bk is not None else 0,
+        },
+    }
+
+
 def analyze_position(board: chess.Board, engine: EngineEval | None = None,
                      engine_depth: int = 20, engine_lines: int = 3) -> dict:
     """Full position analysis returning structured data.
@@ -1191,6 +1283,7 @@ def analyze_position(board: chess.Board, engine: EngineEval | None = None,
         "tactics": analyze_tactics(board),
         "development": analyze_development(board),
         "game_phase": detect_game_phase(board),
+        "regional_control": analyze_regional_control(board),
         "legal_moves": get_legal_moves(board),
         "is_check": board.is_check(),
         "is_checkmate": board.is_checkmate(),

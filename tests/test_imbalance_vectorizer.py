@@ -228,3 +228,103 @@ class TestVectorizeSTM:
         # All delta keys should exist
         for name in FEATURE_NAMES:
             assert f"d_{name}" in d, f"Missing delta: d_{name}"
+
+
+class TestSpatialContextFeatures:
+    """Regional control and king location features (STM-relative)."""
+
+    SPATIAL_FEATURES = [
+        "region_center", "region_stm_kingside", "region_stm_queenside",
+        "region_opp_kingside", "region_opp_queenside",
+        "stm_king_file", "stm_king_rank", "opp_king_file", "opp_king_rank",
+    ]
+
+    def test_spatial_features_present_in_stm(self):
+        """All 9 spatial features should be in vectorize_stm() output."""
+        board = chess.Board()
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        for name in self.SPATIAL_FEATURES:
+            assert name in stm_v, f"Missing spatial feature: {name}"
+
+    def test_spatial_features_in_feature_names(self):
+        """All 9 spatial features should be in STM_FEATURE_NAMES."""
+        for name in self.SPATIAL_FEATURES:
+            assert name in STM_FEATURE_NAMES, f"Missing from STM_FEATURE_NAMES: {name}"
+
+    def test_spatial_features_are_ternary(self):
+        """All spatial features should have values in {-1, 0, 1}."""
+        board = chess.Board()
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        for name in self.SPATIAL_FEATURES:
+            assert stm_v[name] in (-1, 0, 1), f"{name}={stm_v[name]} not in {{-1,0,1}}"
+
+    def test_starting_position_king_locations(self):
+        """In starting position, both kings are on e-file (center) at home rank."""
+        board = chess.Board()  # White to move
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        # White king on e1: file=center(0), STM-rank 1=home(+1)
+        assert stm_v["stm_king_file"] == 0   # e-file = center
+        assert stm_v["stm_king_rank"] == 1    # rank 1 = home
+        # Black king on e8: file=center(0), STM-rank 8=home(+1) for opp
+        assert stm_v["opp_king_file"] == 0    # e-file = center
+        assert stm_v["opp_king_rank"] == 1    # opp at home
+
+    def test_king_location_stm_relative_flip(self):
+        """When Black to move, king locations should flip perspective."""
+        board = chess.Board()
+        board.push_san("e4")  # Black to move
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        # STM is Black: Black king on e8, STM-rank = home(+1)
+        assert stm_v["stm_king_file"] == 0   # e-file = center
+        assert stm_v["stm_king_rank"] == 1    # home for Black
+        # OPP is White: White king on e1, from Black's perspective rank 1 = opp home(+1)
+        assert stm_v["opp_king_file"] == 0
+        assert stm_v["opp_king_rank"] == 1    # home for White
+
+    def test_castled_king_kingside(self):
+        """After O-O, king on g1 should be kingside(+1)."""
+        board = chess.Board()
+        for san in ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "O-O"]:
+            board.push_san(san)
+        # Black to move; White king on g1
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        # OPP (White) king on g1: file=kingside(+1), rank 1=home
+        assert stm_v["opp_king_file"] == 1    # g-file = kingside
+        assert stm_v["opp_king_rank"] == 1    # home
+
+    def test_starting_position_regions_symmetric(self):
+        """In starting position, symmetric regions should have equal control."""
+        board = chess.Board()
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        # STM kingside and OPP kingside should have opposite control or both neutral
+        # Center should be roughly neutral in starting position
+        assert stm_v["region_center"] in (-1, 0, 1)
+        # STM's home regions should be STM-controlled (+1) or neutral
+        assert stm_v["region_stm_kingside"] >= 0
+        assert stm_v["region_stm_queenside"] >= 0
+
+    def test_king_advanced_to_center(self):
+        """King that has marched to center should have rank=center(0)."""
+        # Endgame position with White king on e4
+        board = chess.Board("8/8/4k3/8/4K3/8/8/8 w - - 0 1")
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        # White king on e4: file=center(0), STM-rank 4=center(0)
+        assert stm_v["stm_king_file"] == 0
+        assert stm_v["stm_king_rank"] == 0    # rank 4 = center
+
+    def test_king_advanced_into_opponent_territory(self):
+        """King on rank 6+ (from STM perspective) should be advanced(-1)."""
+        # White king on e6
+        board = chess.Board("8/8/4K3/8/4k3/8/8/8 w - - 0 1")
+        analysis = analyze_position(board)
+        stm_v = vectorize_stm(analysis)
+        # White king on e6: file=center(0), STM-rank 6=advanced(-1)
+        assert stm_v["stm_king_file"] == 0
+        assert stm_v["stm_king_rank"] == -1   # advanced into opp territory

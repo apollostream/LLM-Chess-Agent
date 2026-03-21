@@ -25,6 +25,9 @@ from claude_code_sdk.types import (
 
 from config import PROJECT_ROOT
 
+# Lazy-loaded MRE engine (loaded once, reused)
+_mre_engine = None
+
 _GUIDE_PROMPT = """Analyze this chess position using the Implicative Reasoning Playbook: {fen}
 
 Pre-computed imbalances, tactical motifs, and engine evaluation are provided below — use them as your source, do NOT re-run parse_position.sh.
@@ -43,7 +46,7 @@ Imbalances and tactical motifs:
 {pv_context}
 
 === IMPLICATIVE REASONING PLAYBOOK ===
-
+{mre_section}
 Follow this algorithm to explain WHY the engine's top move is best:
 
 1. POSITION ASSESSMENT: Identify the top 2-3 imbalances favoring each side. State who stands better and the position's character (static vs dynamic).
@@ -133,6 +136,92 @@ PGN:
 """
 
 
+def _get_mre_engine():
+    """Lazy-load MRE engine from cached BN model."""
+    global _mre_engine
+    if _mre_engine is None:
+        import sys
+        scripts_dir = str(PROJECT_ROOT / ".claude" / "skills" / "chess-imbalances" / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from mre_inference import MREEngine
+        bif_path = PROJECT_ROOT / "analysis" / "chess_bn.bif"
+        if bif_path.exists():
+            _mre_engine = MREEngine.from_bif(str(bif_path))
+    return _mre_engine
+
+
+def _compute_mre_section(engine_json_str: str) -> str:
+    """Compute MRE explanations and format as a prompt section.
+
+    Determines eval direction from engine score, runs MRE to find the most
+    relevant feature changes, and formats as guidance for the LLM.
+    """
+    engine = _get_mre_engine()
+    if engine is None:
+        return ""
+
+    # Determine eval direction from engine JSON
+    try:
+        engine_data = json.loads(engine_json_str) if isinstance(engine_json_str, str) else engine_json_str
+        top_lines = engine_data.get("top_lines", [])
+        if not top_lines:
+            return ""
+        score_cp = top_lines[0].get("score_cp")
+        if score_cp is None:
+            # Mate score — clear direction
+            mate_in = top_lines[0].get("mate_in", 0)
+            eval_direction = "improvement" if mate_in and mate_in > 0 else "decline"
+        elif abs(score_cp) < 20:
+            eval_direction = "neutral"
+        else:
+            # Score is from White's perspective in engine output,
+            # but MRE uses STM perspective. For the prompt, we just need
+            # the direction of the best move's impact.
+            eval_direction = "improvement"  # best move improves STM's position
+    except (json.JSONDecodeError, TypeError, KeyError):
+        return ""
+
+    if eval_direction == "neutral":
+        return ""
+
+    # Run MRE
+    from mre_inference import format_mre_explanation
+    results = engine.find_mre(
+        evidence={"eval_change": eval_direction},
+        beam_width=5,
+        top_k=3,
+        max_depth=4,
+    )
+
+    if not results:
+        return ""
+
+    lines = [
+        "MOST RELEVANT EXPLANATION (computed from Bayesian network, 28K positions):",
+        f"Given eval direction = {eval_direction}, the statistically most relevant feature changes are:",
+        "",
+    ]
+    for i, (explanation, gbf) in enumerate(results[:3], 1):
+        features = []
+        for var, state in sorted(explanation.items()):
+            name = var.replace("d_", "").replace("_stm", " (STM)").replace("_opp", " (OPP)")
+            direction = {"pos": "increases", "neg": "decreases", "zero": "unchanged"}.get(state, state)
+            features.append(f"{name} {direction}")
+        lines.append(f"  Explanation {i} (GBF={gbf:.2f}): {', '.join(features)}")
+
+    lines.append("")
+    lines.append(
+        "IMPORTANT: Focus your narrative on the features identified above. "
+        "These are the statistically most relevant changes explaining the eval direction, "
+        "derived from the conditional independence structure of 28K chess positions. "
+        "Other features may be present but are less explanatorily relevant."
+    )
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 async def stream_agent(
     mode: str,
     fen: str | None = None,
@@ -162,6 +251,14 @@ async def stream_agent(
             except Exception:
                 pass  # Fall back to prompt without PV context
 
+        # Compute MRE explanations (most relevant features for this eval direction)
+        mre_section = ""
+        if engine_json:
+            try:
+                mre_section = _compute_mre_section(engine_json)
+            except Exception:
+                pass  # Fall back without MRE
+
         prompt = _GUIDE_PROMPT.format(
             fen=fen,
             analysis_json=analysis_json or "{}",
@@ -169,6 +266,7 @@ async def stream_agent(
             depth=depth,
             lines=lines,
             pv_context=pv_context_str,
+            mre_section=mre_section,
         )
     elif mode == "deep":
         prompt = _DEEP_PROMPT.format(fen=fen, analysis_json=analysis_json or "{}")

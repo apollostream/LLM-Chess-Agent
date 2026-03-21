@@ -91,9 +91,12 @@ Position (FEN)
 | **Feature deltas P₀→Pₙ** | Vector subtraction | `chess_pipeline.py:compute_pv_context` (line 287) | **Yes** — arithmetic |
 | **4-tier hierarchy** | Feature classification | `chess_pipeline.py:_tier_label` (line 111) | **Yes** — set membership lookup |
 | **Motif formatting** | Type-specific formatters | `chess_pipeline.py:_format_tactical_motifs` (line 124) | **Yes** — string templates |
+| **Spatial context (9 features)** | Regional control + king location | `board_utils.py:analyze_regional_control` | **Yes** — square-counting per region |
+| **Bayesian network (90 nodes)** | Precision matrix → DAG → CPTs | `analysis/chess_bn.bif` (pgmpy) | **Yes** — learned from 28K positions |
+| **MRE (feature selection)** | GBF beam search | `mre_inference.py:find_mre` | **Yes** — computed from BN, not LLM |
 | **Position assessment** | LLM reads evidence | `agent_service.py:_GUIDE_PROMPT` step 1 | **No** — LLM judgment |
 | **Hub→tactical cascades** | LLM traces chains | `agent_service.py:_GUIDE_PROMPT` step 4 | **No** — LLM reasoning |
-| **Narrative synthesis** | LLM writes prose | `agent_service.py:_GUIDE_PROMPT` step 6 | **No** — LLM composition |
+| **Narrative synthesis** | LLM writes prose | `agent_service.py:_GUIDE_PROMPT` step 6 | **No** — LLM composition, but **constrained by MRE** |
 
 ## The Critical Insight
 

@@ -35,6 +35,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # from game_narrative import detect_critical_moments, GameNarrative, render_game_story
 # moments = detect_critical_moments("game.pgn", depth=18, threshold_cp=50, decay_scale_cp=750)
 
+# Rule extraction — cross-validate, extract rules, phase analysis
+.venv/bin/python .claude/skills/chess-imbalances/scripts/rule_extraction.py cross-validate
+.venv/bin/python .claude/skills/chess-imbalances/scripts/rule_extraction.py extract-rules --output analysis/rules_stm.json
+.venv/bin/python .claude/skills/chess-imbalances/scripts/rule_extraction.py phase-analysis --output analysis/rules_by_phase.json
+.venv/bin/python .claude/skills/chess-imbalances/scripts/rule_extraction.py summary --input analysis/rules_stm.json
+
+# MRE inference — find most relevant explanations from the Bayesian network
+.venv/bin/python .claude/skills/chess-imbalances/scripts/mre_inference.py analysis/chess_bn.bif improvement
+.venv/bin/python .claude/skills/chess-imbalances/scripts/mre_inference.py analysis/chess_bn.bif decline
+
+# Feature extraction — regenerate CSV from game cache (after vectorizer changes)
+.venv/bin/python .claude/skills/chess-imbalances/scripts/extract_features.py --mode stm
+
 # Install dependencies
 source .venv/bin/activate && pip install -r requirements.txt
 ```
@@ -57,6 +70,14 @@ This is a Claude Code skill project. The skill analyzes chess positions through 
 **BFIH enforcement pipeline** (`--deep` mode): Three CLI tools support deep analysis. `bfih_models.py` defines Pydantic v2 models for the 9 BFIH phases with built-in validation constraints. `bfih_validator.py` is a CLI tool Claude Code calls after generating each phase's JSON — it validates against models and enforces cross-phase gates (G2, G5, G6, G8). `bfih_formatter.py` renders validated phase JSON to markdown. Claude Code follows SKILL.md's step-by-step deep mode protocol; Python provides validation and formatting, not orchestration.
 
 **`game_narrative.py`** provides the full-game narrative pipeline. `detect_critical_moments()` sweeps every move with Stockfish, flags eval swings above a threshold, and returns sorted `CriticalMoment` objects. `detect_critical_moments_from_cache()` does the same but reads from a pre-computed eval cache instead of calling Stockfish — used by the web app's game init pipeline. An exponential decay factor (`decay_scale_cp`, default 750) raises the effective threshold in lopsided positions — `effective = threshold / exp(-|eval|/A)` — suppressing noise when the game is already decided while still flagging important conversion errors. `GameNarrative` and related Pydantic models define the game story structure (arc type, critical moments, turning point, key lessons). `render_game_story()` renders a completed narrative to markdown. Claude Code uses this as a library — detection is automated, narrative synthesis is Claude's job.
+
+**`imbalance_vectorizer.py`** flattens analysis JSON into canonical numeric feature vectors. Two representations: `vectorize()` (absolute white/black, 119 features) and `vectorize_stm()` (side-to-move relative, 86 features including 9 spatial context features). `compute_deltas()` computes element-wise changes between consecutive positions. The 9 spatial context features — 5 regional control nodes (center, stm_kingside, stm_queenside, opp_kingside, opp_queenside) and 4 king location nodes (stm_king_file, stm_king_rank, opp_king_file, opp_king_rank) — are STM-relative with rank-flip when Black is to move.
+
+**`rule_extraction.py`** is a CLI tool for extracting implicative rules from trained models. Subcommands: `cross-validate` (GroupKFold GBR validation), `extract-rules` (decision tree rule extraction with confidence/coverage/lift), `phase-analysis` (per-phase rules), `summary` (markdown report). Key finding: GBR R²=0.471 out-of-sample (vs 0.871 in-sample).
+
+**`mre_inference.py`** implements Most Relevant Explanation (Yuan et al. 2011) on the chess Bayesian network. `MREEngine.from_bif()` loads the BN, `compute_gbf()` computes the Generalized Bayes Factor GBF(x,e) = P(e|x)/P(e|¬x), and `find_mre()` uses beam search to find partial variable instantiations maximizing GBF. Integrated into the Player's Guide prompt via `agent_service.py` — MRE identifies which feature changes are statistically most relevant, constraining the LLM's narrative.
+
+**Bayesian network** (`analysis/chess_bn.bif`): 90-node discrete BN (89 features + eval_change target) with 223 edges from precision matrix skeleton. CPTs learned from 28K discretized positions via BayesianEstimator (BDeu prior). The precision matrix was computed via Graphical Lasso (α=0.2163, 94.5% sparse, 214 edges). Spatial context features have degree ≥ 4 — they are empirically load-bearing, not redundant.
 
 **`engine_eval.py`** wraps Stockfish via python-chess's UCI protocol. Context-managed `EngineEval` class provides `evaluate_position()`, `evaluate_multipv()`, and `classify_move()`. Auto-discovers Stockfish binary; gracefully returns `None` when unavailable. Called by `board_utils.py` when `--engine` flag is passed, producing the `engine` key in the analysis JSON.
 

@@ -1,0 +1,571 @@
+{
+  "source": "stm_decision_tree",
+  "target": "d_eval_stm",
+  "dataset": "stm",
+  "n_rules": 16,
+  "tree_depth": 4,
+  "tree_accuracy": 0.578283188364466,
+  "cross_validation": null,
+  "rules": [
+    {
+      "rule_id": "leaf_4",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -3.5
+        },
+        {
+          "feature": "d_checks_available_opp",
+          "operator": "<=",
+          "threshold": -18.5
+        }
+      ],
+      "consequent_class": "neutral",
+      "confidence": 0.381,
+      "coverage": 0.0022,
+      "support": 63,
+      "lift": 1.4965,
+      "phase_stability": {
+        "endgame": 0.0,
+        "middlegame": 0.5217,
+        "opening": 0.0
+      }
+    },
+    {
+      "rule_id": "leaf_5",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -3.5
+        },
+        {
+          "feature": "d_checks_available_opp",
+          "operator": ">",
+          "threshold": -18.5
+        }
+      ],
+      "consequent_class": "decline",
+      "confidence": 0.8785,
+      "coverage": 0.0692,
+      "support": 1942,
+      "lift": 2.3434,
+      "phase_stability": {
+        "endgame": 0.9411,
+        "middlegame": 0.735,
+        "opening": 0.8043
+      }
+    },
+    {
+      "rule_id": "leaf_7",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -3.5
+        },
+        {
+          "feature": "d_space_opp",
+          "operator": "<=",
+          "threshold": 3.5
+        }
+      ],
+      "consequent_class": "decline",
+      "confidence": 0.4234,
+      "coverage": 0.2089,
+      "support": 5860,
+      "lift": 1.1294,
+      "phase_stability": {
+        "endgame": 0.3801,
+        "middlegame": 0.3784,
+        "opening": 0.4526
+      }
+    },
+    {
+      "rule_id": "leaf_8",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -3.5
+        },
+        {
+          "feature": "d_space_opp",
+          "operator": ">",
+          "threshold": 3.5
+        }
+      ],
+      "consequent_class": "decline",
+      "confidence": 0.6498,
+      "coverage": 0.161,
+      "support": 4515,
+      "lift": 1.7335,
+      "phase_stability": {
+        "endgame": 0.6226,
+        "middlegame": 0.6027,
+        "opening": 0.6822
+      }
+    },
+    {
+      "rule_id": "leaf_11",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_queen_count_stm",
+          "operator": "<=",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_passed_pawns_opp",
+          "operator": "<=",
+          "threshold": -2.5
+        }
+      ],
+      "consequent_class": "neutral",
+      "confidence": 1.0,
+      "coverage": 0.0001,
+      "support": 4,
+      "lift": 3.9283,
+      "phase_stability": {
+        "endgame": 1.0,
+        "middlegame": 0.0,
+        "opening": 0.0
+      }
+    },
+    {
+      "rule_id": "leaf_12",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_queen_count_stm",
+          "operator": "<=",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_passed_pawns_opp",
+          "operator": ">",
+          "threshold": -2.5
+        }
+      ],
+      "consequent_class": "decline",
+      "confidence": 0.971,
+      "coverage": 0.0025,
+      "support": 69,
+      "lift": 2.5902,
+      "phase_stability": {
+        "endgame": 1.0,
+        "middlegame": 0.6667,
+        "opening": 0.0
+      }
+    },
+    {
+      "rule_id": "leaf_14",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_queen_count_stm",
+          "operator": ">",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 3.5
+        }
+      ],
+      "consequent_class": "improvement",
+      "confidence": 0.461,
+      "coverage": 0.0612,
+      "support": 1716,
+      "lift": 1.2439,
+      "phase_stability": {
+        "endgame": 0.4483,
+        "middlegame": 0.4447,
+        "opening": 0.4888
+      }
+    },
+    {
+      "rule_id": "leaf_15",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 1.5
+        },
+        {
+          "feature": "d_queen_count_stm",
+          "operator": ">",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 3.5
+        }
+      ],
+      "consequent_class": "improvement",
+      "confidence": 0.6659,
+      "coverage": 0.0316,
+      "support": 886,
+      "lift": 1.797,
+      "phase_stability": {
+        "endgame": 0.7707,
+        "middlegame": 0.5166,
+        "opening": 0.5878
+      }
+    },
+    {
+      "rule_id": "leaf_19",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_queen_count_opp",
+          "operator": "<=",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_minor_count_stm",
+          "operator": "<=",
+          "threshold": -0.5
+        }
+      ],
+      "consequent_class": "improvement",
+      "confidence": 0.9661,
+      "coverage": 0.0021,
+      "support": 59,
+      "lift": 2.6071,
+      "phase_stability": {
+        "endgame": 0.9636,
+        "middlegame": 1.0,
+        "opening": 0.0
+      }
+    },
+    {
+      "rule_id": "leaf_20",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_queen_count_opp",
+          "operator": "<=",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_minor_count_stm",
+          "operator": ">",
+          "threshold": -0.5
+        }
+      ],
+      "consequent_class": "neutral",
+      "confidence": 1.0,
+      "coverage": 0.0001,
+      "support": 2,
+      "lift": 3.9283,
+      "phase_stability": {
+        "endgame": 0.0,
+        "middlegame": 1.0,
+        "opening": 0.0
+      }
+    },
+    {
+      "rule_id": "leaf_22",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_queen_count_opp",
+          "operator": ">",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -3.5
+        }
+      ],
+      "consequent_class": "decline",
+      "confidence": 0.6541,
+      "coverage": 0.0246,
+      "support": 691,
+      "lift": 1.7449,
+      "phase_stability": {
+        "endgame": 0.8401,
+        "middlegame": 0.4746,
+        "opening": 0.5294
+      }
+    },
+    {
+      "rule_id": "leaf_23",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_queen_count_opp",
+          "operator": ">",
+          "threshold": -0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -3.5
+        }
+      ],
+      "consequent_class": "decline",
+      "confidence": 0.454,
+      "coverage": 0.0508,
+      "support": 1425,
+      "lift": 1.2112,
+      "phase_stability": {
+        "endgame": 0.4547,
+        "middlegame": 0.4191,
+        "opening": 0.4879
+      }
+    },
+    {
+      "rule_id": "leaf_26",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 3.5
+        },
+        {
+          "feature": "d_space_stm",
+          "operator": "<=",
+          "threshold": 3.5
+        }
+      ],
+      "consequent_class": "improvement",
+      "confidence": 0.4422,
+      "coverage": 0.1604,
+      "support": 4500,
+      "lift": 1.1934,
+      "phase_stability": {
+        "endgame": 0.4085,
+        "middlegame": 0.3848,
+        "opening": 0.4709
+      }
+    },
+    {
+      "rule_id": "leaf_27",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": "<=",
+          "threshold": 3.5
+        },
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 3.5
+        }
+      ],
+      "consequent_class": "improvement",
+      "confidence": 0.6396,
+      "coverage": 0.1605,
+      "support": 4503,
+      "lift": 1.726,
+      "phase_stability": {
+        "endgame": 0.6047,
+        "middlegame": 0.5781,
+        "opening": 0.6822
+      }
+    },
+    {
+      "rule_id": "leaf_29",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 3.5
+        },
+        {
+          "feature": "d_initiative_score_opp",
+          "operator": "<=",
+          "threshold": 37.0
+        }
+      ],
+      "consequent_class": "improvement",
+      "confidence": 0.8941,
+      "coverage": 0.0629,
+      "support": 1765,
+      "lift": 2.4127,
+      "phase_stability": {
+        "endgame": 0.9314,
+        "middlegame": 0.7686,
+        "opening": 0.8758
+      }
+    },
+    {
+      "rule_id": "leaf_30",
+      "antecedent": [
+        {
+          "feature": "d_space_stm",
+          "operator": ">",
+          "threshold": 0.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": -1.5
+        },
+        {
+          "feature": "d_material_advantage",
+          "operator": ">",
+          "threshold": 3.5
+        },
+        {
+          "feature": "d_initiative_score_opp",
+          "operator": ">",
+          "threshold": 37.0
+        }
+      ],
+      "consequent_class": "neutral",
+      "confidence": 0.3654,
+      "coverage": 0.0019,
+      "support": 52,
+      "lift": 1.4353,
+      "phase_stability": {
+        "endgame": 0.0,
+        "middlegame": 0.4857,
+        "opening": 0.2
+      }
+    }
+  ]
+}
